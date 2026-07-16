@@ -41,11 +41,35 @@ supervisor i ét image**:
 | `YOURLS_SITE` | Site-URL. Tom = auto-detektér (brug den tildelte port). Se [Eget domæne](#eget-domæne-bag-reverse-proxy) | *(tom)* |
 | `YOURLS_PRIVATE` | Kræv login for at oprette links | `true` |
 | `AUTO_UPDATE` | Hent nyeste YOURLS (og opdatér plugins) ved hver opstart | `false` |
+| `QR_CODE` | QR-koder: `.qr` på en kort-URL, se [QR-koder](#qr-koder) | `false` |
 | `PLUGINS` | Plugins at installere, se [Plugins](#plugins) | *(tom)* |
 | `YOURLS_LANG` | Sprog, fx `da_DK` (kræver `.mo`-fil i `user/language`) | *(engelsk)* |
 | `YOURLS_URL_CONVERT` | Nøgleformat: `36` (små bogstaver) / `62` (blandet) | `36` |
 
 Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
+
+## QR-koder
+
+Slå **`QR_CODE`** til og tryk Restart. Så giver `.qr` på enhver kort-URL dens QR-kode:
+
+```
+https://kort.dit-domæne.dk/abc      → dit link
+https://kort.dit-domæne.dk/abc.qr   → QR-kode for linket
+```
+
+Det er YOURLS' eget eksempel-plugin
+([docs](https://yourls.org/docs/development/examples/qrcode)), som er lagt ind i imaget.
+
+**Vær opmærksom på:** QR-billedet genereres ikke lokalt. Brugeren sendes videre til
+`api.qrserver.com` (GoQR), som ifølge deres vilkår logger **IP og referrer** (men ikke
+selve QR-dataen), med en grænse på 10.000 forespørgsler pr. dag. QR-koder virker derfor
+ikke uden internetadgang. Vil du undgå tredjepart, så find et plugin der tegner koden
+lokalt via `PLUGINS` nedenfor.
+
+I modsætning til `PLUGINS` **aktiverer** denne toggle også pluginet — den er en
+funktions-kontakt, så den håndhæves ved hver opstart. Slår du QR fra i yggdrasil,
+deaktiveres det; deaktiverer du det manuelt under Manage Plugins mens toggle'en står
+til, aktiveres det igen ved næste genstart. Dine øvrige plugins røres ikke.
 
 ## Plugins
 

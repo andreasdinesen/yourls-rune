@@ -40,6 +40,7 @@ jobs:
             -e YOURLS_PASS=test1234 \
             -e YOURLS_PRIVATE= \
             -e PLUGINS='YOURLS/antispam, GautamGupta/YOURLS-Import-Export' \
+            -e QR_CODE=true \
             yourls-rune:test
 
       - name: Wait for install to finish (login page appears)
@@ -93,14 +94,35 @@ jobs:
             || { echo "::error::multi-dir plugin not installed at its root"; docker logs yourls; exit 1; }
           docker exec yourls test -f /data/user/plugins/YOURLS-Import-Export/fileio/csv.php \
             || { echo "::error::plugin subdirectory was not copied"; docker logs yourls; exit 1; }
-          # Activation must stay the user's choice: nothing should be enabled yet.
+          # Activation must stay the user's choice for downloaded plugins.
           active=$(docker exec yourls mariadb --protocol=socket -S /run/mysqld/mysqld.sock \
                    -uroot -N -B -e \
                    "SELECT option_value FROM yourls.yourls_options WHERE option_name='active_plugins';")
           echo "active_plugins = $active"
-          [ "$active" = "a:0:{}" ] \
-            || { echo "::error::plugins should not be auto-activated (got: $active)"; exit 1; }
+          if echo "$active" | grep -qE 'antispam|Import-Export'; then
+            echo "::error::PLUGINS must not be auto-activated (got: $active)"; exit 1
+          fi
           echo "OK: plugin installed, not auto-activated"
+
+      - name: Assert the QR_CODE toggle installs, activates, and works
+        run: |
+          # Unlike PLUGINS, QR_CODE is a feature switch: it must end up active.
+          docker exec yourls test -f /data/user/plugins/qr-code/plugin.php \
+            || { echo "::error::qr-code plugin not installed"; docker logs yourls; exit 1; }
+          active=$(docker exec yourls mariadb --protocol=socket -S /run/mysqld/mysqld.sock \
+                   -uroot -N -B -e \
+                   "SELECT option_value FROM yourls.yourls_options WHERE option_name='active_plugins';")
+          echo "active_plugins = $active"
+          echo "$active" | grep -q 'qr-code/plugin.php' \
+            || { echo "::error::QR_CODE did not activate the plugin"; docker logs yourls; exit 1; }
+          # End-to-end: "yourls" is one of YOURLS' sample links, so /yourls.qr
+          # must redirect to the QR image service.
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' http://localhost:8080/yourls.qr || true)
+          echo "/yourls.qr -> $loc"
+          case "$loc" in
+            *api.qrserver.com*) echo "OK: QR redirect works" ;;
+            *) echo "::error::/yourls.qr did not redirect to the QR service"; docker logs yourls; exit 1 ;;
+          esac
 
       # Regression test for the reverse-proxy setup: a fresh instance configured
       # with an https YOURLS_SITE, reached over http with forwarded headers (as

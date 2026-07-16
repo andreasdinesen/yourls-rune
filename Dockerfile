@@ -32,6 +32,11 @@ COPY config-container.php /usr/src/yourls/user/config-container.php
 # Redirect the bare site root to /admin/ (no public landing page).
 COPY apache-root-redirect.conf /etc/apache2/conf-enabled/zz-yourls-root.conf
 
+# Bundled optional feature: YOURLS' official QR-code example plugin, switched on
+# with the QR_CODE variable. Activation needs the DB, so it runs post-install.
+COPY qr-code-plugin.php /usr/local/share/rune-plugins/qr-code/plugin.php
+COPY apply-plugin-state.php /usr/local/lib/apply-plugin-state.php
+
 # Process supervision + the per-process launchers.
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY rune-entrypoint.sh start-apache.sh run-mariadb.sh db-dump.sh /usr/local/bin/

@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 4
+  version: 5
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
@@ -46,6 +46,12 @@ gameskill:
       default: true
     - key: AUTO_UPDATE
       name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version). Opdaterer også plugins nedenfor"
+      type: bool
+      default: false
+    # Unlike PLUGINS, this one both installs AND activates — it is a feature
+    # switch, so the toggle is authoritative and re-applied on every start.
+    - key: QR_CODE
+      name: "QR-koder — tilføj .qr til en kort-URL for at se dens QR-kode (fx /abc.qr). Bemærk: QR-billedet hentes fra api.qrserver.com, som logger IP og referrer"
       type: bool
       default: false
     # Downloaded on start into the persisted user/plugins dir. Never auto-enabled

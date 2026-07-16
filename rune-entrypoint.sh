@@ -53,6 +53,8 @@ export YOURLS_PRIVATE="$(norm_bool YOURLS_PRIVATE true)"
 export YOURLS_UNIQUE_URLS="$(norm_bool YOURLS_UNIQUE_URLS true)"
 export YOURLS_NO_VERSION_CHECK="$(norm_bool YOURLS_NO_VERSION_CHECK false)"
 AUTO_UPDATE="$(norm_bool AUTO_UPDATE false)"
+# Exported: start-apache.sh applies this to active_plugins once the DB is up.
+export QR_CODE="$(norm_bool QR_CODE false)"
 
 # --- Lay down YOURLS core fresh from the image each boot ----------------------
 # /var/www/html is NOT a volume, so copying core on every start means a newer
@@ -169,6 +171,17 @@ if [ -n "${PLUGINS:-}" ]; then
         [ -n "$_spec" ] || continue
         install_plugin "$_spec" || true
     done
+fi
+
+# --- Bundled QR-code feature (QR_CODE toggle) ---------------------------------
+# YOURLS' own example plugin (yourls.org/docs/development/examples/qrcode): add
+# ".qr" to a short URL to get its QR code. Shipped in the image so it can be
+# switched on from yggdrasil. Refresh the file every boot so image upgrades ship
+# fixes; activation happens in start-apache.sh once the options table exists.
+if [ "$QR_CODE" = true ]; then
+    mkdir -p "$DATA/user/plugins/qr-code"
+    cp -a /usr/local/share/rune-plugins/qr-code/plugin.php \
+          "$DATA/user/plugins/qr-code/plugin.php"
 fi
 
 # --- Ownership ----------------------------------------------------------------

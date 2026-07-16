@@ -49,6 +49,9 @@ SQL
             else
                 log "YOURLS-installation: uventet svar (tjek /admin/install.php)"
             fi
+            # Active plugins live in the options table, so the QR toggle can only
+            # be applied now that the database is installed.
+            php /usr/local/lib/apply-plugin-state.php || true
             break
         fi
         sleep 1
