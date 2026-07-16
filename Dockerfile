@@ -32,6 +32,9 @@ COPY config-container.php /usr/src/yourls/user/config-container.php
 # One-shot table installer, invoked when the database has no YOURLS tables yet.
 COPY yourls-install.php /usr/local/lib/yourls-install.php
 
+# Redirect the bare site root to /admin/ (no public landing page).
+COPY apache-root-redirect.conf /etc/apache2/conf-enabled/zz-yourls-root.conf
+
 # Process supervision + the per-process launchers.
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY rune-entrypoint.sh start-apache.sh run-mariadb.sh db-dump.sh /usr/local/bin/

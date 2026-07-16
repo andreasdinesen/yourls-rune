@@ -64,16 +64,17 @@ jobs:
             || { echo "::error::admin area did not present a login"; docker logs yourls; exit 1; }
           echo "OK: login required"
 
-      - name: Assert the database is installed (no install prompt)
+      - name: Assert the database was installed and the root redirects
         run: |
-          # A correctly installed instance serves the public homepage 200/302,
-          # not the installer.
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
-          echo "homepage -> HTTP $code"
-          docker logs yourls | grep -i "Table 'yourls_url' created" \
-            || docker logs yourls | grep -qi "allerede installeret" \
+          # Tables must have been created (or already present) on first boot.
+          docker logs yourls 2>&1 | grep -qiE "tables successfully created|allerede installeret" \
             || { echo "::error::YOURLS tables were not installed"; docker logs yourls; exit 1; }
-          echo "OK: installed"
+          # The bare root redirects to the admin (302), not a 403 directory listing.
+          root=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
+          echo "root -> HTTP $root"
+          [ "$root" = "302" ] \
+            || { echo "::error::root did not redirect to /admin/ (HTTP $root)"; docker logs yourls; exit 1; }
+          echo "OK: installed and root redirects to /admin/"
 
       - name: Dump logs
         if: always()

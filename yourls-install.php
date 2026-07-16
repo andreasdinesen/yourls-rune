@@ -33,6 +33,14 @@ $defaults->core_loaded            = false;
 $defaults->get_all_options        = false;
 new \YOURLS\Config\Init($defaults);
 
+// The trimmed init skips the 'plugins_loaded' action, which is what normally
+// populates $yourls_allowedprotocols (via yourls_kses_init). Without it the
+// sample-link insertion inside yourls_create_sql_tables() fatals in
+// yourls_is_allowed_protocol(). Populate the KSES globals explicitly.
+if (function_exists('yourls_kses_init')) {
+    yourls_kses_init();
+}
+
 $installed = false;
 try {
     $installed = yourls_is_installed();
