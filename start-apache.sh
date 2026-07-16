@@ -36,10 +36,14 @@ SQL
 # against an existing DB it just reports "already installed". Backgrounded so we
 # can exec Apache in the foreground for supervisord; the child survives the exec.
 (
+    # install.php is an admin page, so with an https YOURLS_SITE YOURLS would
+    # redirect this local http request to https (and never install). Claim the
+    # forwarded scheme so it treats us as already-secure and answers 200.
+    hdr='X-Forwarded-Proto: https'
     for _ in $(seq 1 90); do
-        if [ "$(curl -s -o /dev/null -w '%{http_code}' \
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$hdr" \
                 http://127.0.0.1:8080/admin/install.php || true)" = "200" ]; then
-            resp="$(curl -s 'http://127.0.0.1:8080/admin/install.php?install=1' || true)"
+            resp="$(curl -s -H "$hdr" 'http://127.0.0.1:8080/admin/install.php?install=1' || true)"
             if printf '%s' "$resp" | grep -qiE 'successfully created|already installed'; then
                 log "YOURLS-installation: OK"
             else

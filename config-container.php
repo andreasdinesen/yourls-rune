@@ -10,6 +10,16 @@
  *   - user/config-extra.php is included at the end for persistent custom tweaks.
  */
 
+/* Behind a reverse proxy that terminates TLS (nginx-proxy-manager, Cloudflare,
+ * Traefik ...), the container only ever sees plain HTTP. Without this, YOURLS
+ * sees an https YOURLS_SITE, decides the request must be upgraded, and redirects
+ * to https — which the proxy forwards back as http, redirecting forever.
+ * Trust the forwarded scheme so YOURLS knows the original request was secure. */
+if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])
+    && strtolower(trim(explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO'])[0])) === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
 // a helper function to lookup "env_FILE", "env", then fallback
 if (!function_exists('getenv_container')) {
     function getenv_container(string $name, ?string $default = null): ?string
@@ -41,8 +51,14 @@ define( 'YOURLS_DB_PREFIX', getenv_container('YOURLS_DB_PREFIX', 'yourls_') );
 /** YOURLS installation URL -- all lowercase, no trailing slash.
  ** When YOURLS_SITE is empty we derive it from the current request, so the rune
  ** works on whatever port yggdrasil assigns and behind a reverse proxy. */
-$__yourls_site = getenv_container('YOURLS_SITE');
-if ($__yourls_site === null || $__yourls_site === '') {
+$__yourls_site = trim((string) getenv_container('YOURLS_SITE', ''));
+if ($__yourls_site !== '' && !preg_match('@^https?://@i', $__yourls_site)) {
+    // A bare domain ("yourls.example.com") is not a valid YOURLS_SITE — YOURLS
+    // needs a scheme. Assume https, which is what a public domain almost always
+    // means behind a proxy.
+    $__yourls_site = 'https://' . ltrim($__yourls_site, '/');
+}
+if ($__yourls_site === '') {
     $__proto = 'http';
     if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
         $__proto = trim(explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO'])[0]);

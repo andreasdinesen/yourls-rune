@@ -78,9 +78,40 @@ jobs:
             || { echo "::error::root did not redirect to /admin/ (HTTP $root)"; docker logs yourls; exit 1; }
           echo "OK: installed and root redirects to /admin/"
 
+      # Regression test for the reverse-proxy setup: a fresh instance configured
+      # with an https YOURLS_SITE, reached over http with forwarded headers (as
+      # nginx-proxy-manager does). Without honoring X-Forwarded-Proto this both
+      # fails to install and redirect-loops on /admin/.
+      - name: Assert proxied https setup installs and does not redirect-loop
+        run: |
+          docker run -d --name yourls-proxy -p 8081:8080 \
+            -e YOURLS_USER=admin \
+            -e YOURLS_PASS=test1234 \
+            -e YOURLS_SITE=https://yourls.example.test \
+            yourls-rune:test
+          for i in $(seq 1 60); do
+            body=$(curl -s -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-Host: yourls.example.test' \
+                   http://localhost:8081/admin/ || true)
+            if echo "$body" | grep -qi 'name="password"'; then echo "attempt $i -> proxied login ready"; break; fi
+            echo "attempt $i -> not ready yet"
+            sleep 5
+          done
+          docker logs yourls-proxy 2>&1 | grep -qi "YOURLS-installation: OK" \
+            || { echo "::error::proxied instance never installed"; docker logs yourls-proxy; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+                 -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-Host: yourls.example.test' \
+                 http://localhost:8081/admin/ || true)
+          echo "proxied /admin/ -> HTTP $code"
+          [ "$code" = "200" ] \
+            || { echo "::error::proxied admin returned $code (redirect loop?)"; docker logs yourls-proxy; exit 1; }
+          echo "OK: proxied https instance installs and serves the login"
+
       - name: Dump logs
         if: always()
-        run: docker logs yourls || true
+        run: |
+          docker logs yourls || true
+          echo "----- proxied instance -----"
+          docker logs yourls-proxy || true
 
   publish:
     needs: smoke-test

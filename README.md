@@ -38,13 +38,34 @@ supervisor i ét image**:
 |---|---|---|
 | `YOURLS_USER` | Admin-brugernavn | `admin` |
 | `YOURLS_PASS` | Admin-adgangskode (skjult) | *(påkrævet)* |
-| `YOURLS_SITE` | Site-URL. Tom = auto-detektér. Sæt fx `https://kort.dit-domæne.dk` ved eget domæne | *(tom)* |
+| `YOURLS_SITE` | Site-URL. Tom = auto-detektér (brug den tildelte port). Se [Eget domæne](#eget-domæne-bag-reverse-proxy) | *(tom)* |
 | `YOURLS_PRIVATE` | Kræv login for at oprette links | `true` |
 | `AUTO_UPDATE` | Hent nyeste YOURLS ved hver opstart | `false` |
 | `YOURLS_LANG` | Sprog, fx `da_DK` (kræver `.mo`-fil i `user/language`) | *(engelsk)* |
 | `YOURLS_URL_CONVERT` | Nøgleformat: `36` (små bogstaver) / `62` (blandet) | `36` |
 
 Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
+
+## Eget domæne bag reverse proxy
+
+**`YOURLS_SITE` opretter ikke domænet** — det fortæller kun YOURLS hvad dens egen adresse
+er. Sæt det først når DNS og en reverse proxy rent faktisk peger på containeren, ellers
+låser du dig ude: YOURLS ser en `https`-adresse, opdager at forbindelsen ikke er https, og
+redirecter til en adresse der ikke svarer.
+
+Rækkefølge der virker:
+
+1. Lad `YOURLS_SITE` stå **tom**, tryk Start, og bekræft at YOURLS virker på den tildelte
+   port.
+2. Peg DNS for dit domæne på serveren.
+3. Sæt en reverse proxy op (fx `nginx-proxy-manager`-runen): proxy host `kort.dit-domæne.dk`
+   → serverens IP + YOURLS-containerens tildelte port. Slå SSL til.
+4. Sæt nu `YOURLS_SITE` = `https://kort.dit-domæne.dk` og tryk **Restart**.
+
+Runen håndterer selv proxy-opsætningen: den stoler på `X-Forwarded-Proto`/`X-Forwarded-Host`,
+så YOURLS ved at den oprindelige forespørgsel var https. Uden det ville YOURLS redirecte til
+https i en uendelig løkke (proxyen sender den videre som http igen). Skriver du et bart
+domæne uden `https://` foran, sættes det automatisk på.
 
 ## Automatiske opdateringer
 
