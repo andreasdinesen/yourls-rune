@@ -66,9 +66,9 @@ jobs:
 
       - name: Assert the database was installed and the root redirects
         run: |
-          # Tables must have been created (or already present) on first boot.
-          docker logs yourls 2>&1 | grep -qiE "tables successfully created|allerede installeret" \
-            || { echo "::error::YOURLS tables were not installed"; docker logs yourls; exit 1; }
+          # Install must have completed (or already been installed) on first boot.
+          docker logs yourls 2>&1 | grep -qiE "installation fuldført|allerede installeret" \
+            || { echo "::error::YOURLS install did not complete"; docker logs yourls; exit 1; }
           # The bare root redirects to the admin (302), not a 403 directory listing.
           root=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
           echo "root -> HTTP $root"
