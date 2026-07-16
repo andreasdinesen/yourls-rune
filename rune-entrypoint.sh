@@ -148,8 +148,11 @@ install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
         rm -rf "$tmp"; log "Plugin '$spec': kunne ikke hentes"; return 1
     fi
     # GitHub tarballs unpack to <owner>-<repo>-<sha>/; plugin.php sits at that
-    # root for most plugins, but occasionally one level further down.
-    found="$(find "$tmp" -maxdepth 3 -name plugin.php -print -quit 2>/dev/null || true)"
+    # root for most plugins, but occasionally one level further down. Pick the
+    # SHALLOWEST one: a repo can ship helper files in subdirs that sort before
+    # plugin.php, and taking whatever find hits first would install that instead.
+    found="$(find "$tmp" -maxdepth 3 -name plugin.php -printf '%d\t%p\n' 2>/dev/null \
+             | sort -n | head -1 | cut -f2-)"
     if [ -z "$found" ]; then
         rm -rf "$tmp"; log "Plugin '$spec': ingen plugin.php fundet"; return 1
     fi

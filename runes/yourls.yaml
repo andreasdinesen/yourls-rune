@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 3
+  version: 4
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as

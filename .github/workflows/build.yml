@@ -39,7 +39,7 @@ jobs:
             -e YOURLS_USER=admin \
             -e YOURLS_PASS=test1234 \
             -e YOURLS_PRIVATE= \
-            -e PLUGINS='YOURLS/antispam' \
+            -e PLUGINS='YOURLS/antispam, GautamGupta/YOURLS-Import-Export' \
             yourls-rune:test
 
       - name: Wait for install to finish (login page appears)
@@ -87,6 +87,12 @@ jobs:
             || { echo "::error::plugin was not installed"; docker logs yourls; exit 1; }
           docker logs yourls 2>&1 | grep -qi "Plugin 'antispam' installeret" \
             || { echo "::error::no install log line for the plugin"; docker logs yourls; exit 1; }
+          # This repo ships a helper subdir (fileio/) sorting before plugin.php,
+          # so it proves we pick the SHALLOWEST plugin.php, not the first found.
+          docker exec yourls test -f /data/user/plugins/YOURLS-Import-Export/plugin.php \
+            || { echo "::error::multi-dir plugin not installed at its root"; docker logs yourls; exit 1; }
+          docker exec yourls test -f /data/user/plugins/YOURLS-Import-Export/fileio/csv.php \
+            || { echo "::error::plugin subdirectory was not copied"; docker logs yourls; exit 1; }
           # Activation must stay the user's choice: nothing should be enabled yet.
           active=$(docker exec yourls mariadb --protocol=socket -S /run/mysqld/mysqld.sock \
                    -uroot -N -B -e \
