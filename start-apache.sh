@@ -30,12 +30,26 @@ GRANT ALL PRIVILEGES ON \`yourls\`.* TO 'yourls'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
-# Create YOURLS tables + admin on first run (the script self-guards if already
-# installed). Runs as root — it only touches the database, no files — and is
-# non-fatal so a fresh boot against an existing DB is fine.
-log "Kontrollerer YOURLS-installation ..."
-( cd /var/www/html && php /usr/local/lib/yourls-install.php ) \
-    || log "install-script gav en fejl (fortsætter)"
+# Trigger YOURLS' own web installer once Apache is serving. Running it over HTTP
+# uses YOURLS' full, correct init (unlike a trimmed CLI bootstrap), needs no
+# nonce (install.php reads $_REQUEST['install']), and is idempotent — on a boot
+# against an existing DB it just reports "already installed". Backgrounded so we
+# can exec Apache in the foreground for supervisord; the child survives the exec.
+(
+    for _ in $(seq 1 90); do
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' \
+                http://127.0.0.1:8080/admin/install.php || true)" = "200" ]; then
+            resp="$(curl -s 'http://127.0.0.1:8080/admin/install.php?install=1' || true)"
+            if printf '%s' "$resp" | grep -qiE 'successfully created|already installed'; then
+                log "YOURLS-installation: OK"
+            else
+                log "YOURLS-installation: uventet svar (tjek /admin/install.php)"
+            fi
+            break
+        fi
+        sleep 1
+    done
+) &
 
 log "Starter Apache ..."
 exec apache2-foreground

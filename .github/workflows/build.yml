@@ -41,33 +41,35 @@ jobs:
             -e YOURLS_PRIVATE= \
             yourls-rune:test
 
-      - name: Wait for YOURLS to come up
+      - name: Wait for install to finish (login page appears)
         run: |
+          # The login form (password field) only appears once YOURLS is installed;
+          # before that /admin/ shows the installer. Poll for it.
           for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/admin/ || true)
-            echo "attempt $i -> HTTP $code"
-            if [ "$code" = "200" ] || [ "$code" = "302" ]; then
-              exit 0
+            body=$(curl -s http://localhost:8080/admin/ || true)
+            if echo "$body" | grep -qi 'name="password"'; then
+              echo "attempt $i -> login ready"; exit 0
             fi
+            echo "attempt $i -> not ready yet"
             sleep 5
           done
-          echo "::error::YOURLS did not become ready"
+          echo "::error::YOURLS login page never appeared"
           docker logs yourls
           exit 1
 
       - name: Assert the admin area requires login (empty YOURLS_PRIVATE trap)
         run: |
           # With YOURLS_PRIVATE deliberately blank (as yggdrasil sends it), the
-          # admin page must still redirect/serve the login, not open access.
+          # admin page must still present the login, not open access.
           body=$(curl -s http://localhost:8080/admin/)
-          echo "$body" | grep -qiE 'password|log ?in|login' \
+          echo "$body" | grep -qi 'name="password"' \
             || { echo "::error::admin area did not present a login"; docker logs yourls; exit 1; }
           echo "OK: login required"
 
-      - name: Assert the database was installed and the root redirects
+      - name: Assert install completed and the root redirects
         run: |
-          # Install must have completed (or already been installed) on first boot.
-          docker logs yourls 2>&1 | grep -qiE "installation fuldført|allerede installeret" \
+          # The web installer must have reported success on first boot.
+          docker logs yourls 2>&1 | grep -qiE "YOURLS-installation: OK" \
             || { echo "::error::YOURLS install did not complete"; docker logs yourls; exit 1; }
           # The bare root redirects to the admin (302), not a 403 directory listing.
           root=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
