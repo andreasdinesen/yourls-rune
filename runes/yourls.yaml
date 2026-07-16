@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 2
+  version: 3
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
@@ -45,9 +45,15 @@ gameskill:
       type: bool
       default: true
     - key: AUTO_UPDATE
-      name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version)"
+      name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version). Opdaterer også plugins nedenfor"
       type: bool
       default: false
+    # Downloaded on start into the persisted user/plugins dir. Never auto-enabled
+    # — the user activates them in the admin, which stores it in the database.
+    - key: PLUGINS
+      name: "Plugins — GitHub owner/repo adskilt med komma, fx: YOURLS/antispam, MatthewC/yourls-2fa-support. Find dem på github.com/YOURLS/awesome. Aktivér dem bagefter under Manage Plugins"
+      type: string
+      default: ""
     - key: YOURLS_LANG
       name: "Sprog, fx da_DK (kræver .mo-fil i user/language; tom = engelsk)"
       type: string

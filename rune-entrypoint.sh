@@ -115,6 +115,59 @@ if [ "$AUTO_UPDATE" = true ]; then
     update_core || log "AUTO_UPDATE fejlede; fortsætter på image-versionen ${YOURLS_RUNE_VERSION}"
 fi
 
+# --- Optional plugin installation ---------------------------------------------
+# YOURLS has no plugin installer: a plugin is just a folder holding a plugin.php
+# under user/plugins. Fetch each requested GitHub repo into the persisted plugins
+# dir. We deliberately never auto-activate — activation is the user's call in the
+# admin's "Manage Plugins" page, and it is stored in the database.
+install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
+    local spec="$1" ref="" name url tmp found src dest
+    spec="${spec#http://github.com/}"
+    spec="${spec#https://github.com/}"
+    spec="${spec%/}"
+    spec="${spec%.git}"
+    case "$spec" in *@*) ref="${spec##*@}"; spec="${spec%@*}" ;; esac
+    case "$spec" in
+        */*) : ;;
+        *) log "Plugin '$1' ignoreret (forventer owner/repo)"; return 0 ;;
+    esac
+    name="${spec#*/}"
+    dest="$DATA/user/plugins/$name"
+
+    # Already installed: leave it alone unless AUTO_UPDATE asks for a refresh.
+    if [ -d "$dest" ] && [ "$AUTO_UPDATE" != true ]; then
+        return 0
+    fi
+
+    # The tarball endpoint follows the repo's default branch when no ref given.
+    url="https://api.github.com/repos/$spec/tarball"
+    [ -n "$ref" ] && url="$url/$ref"
+
+    tmp="$(mktemp -d)"
+    if ! curl -fsSL --max-time 60 "$url" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null; then
+        rm -rf "$tmp"; log "Plugin '$spec': kunne ikke hentes"; return 1
+    fi
+    # GitHub tarballs unpack to <owner>-<repo>-<sha>/; plugin.php sits at that
+    # root for most plugins, but occasionally one level further down.
+    found="$(find "$tmp" -maxdepth 3 -name plugin.php -print -quit 2>/dev/null || true)"
+    if [ -z "$found" ]; then
+        rm -rf "$tmp"; log "Plugin '$spec': ingen plugin.php fundet"; return 1
+    fi
+    src="$(dirname "$found")"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -a "$src/." "$dest/"
+    rm -rf "$tmp"
+    log "Plugin '$name' installeret (aktivér det under Manage Plugins)"
+}
+if [ -n "${PLUGINS:-}" ]; then
+    mkdir -p "$DATA/user/plugins"
+    for _spec in $(printf '%s' "${PLUGINS}" | tr ',;' '  '); do
+        [ -n "$_spec" ] || continue
+        install_plugin "$_spec" || true
+    done
+fi
+
 # --- Ownership ----------------------------------------------------------------
 chown -R www-data:www-data "$WEBROOT" 2>/dev/null || true
 chown -R www-data:www-data "$DATA/user" 2>/dev/null || true

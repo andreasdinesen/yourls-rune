@@ -39,6 +39,7 @@ jobs:
             -e YOURLS_USER=admin \
             -e YOURLS_PASS=test1234 \
             -e YOURLS_PRIVATE= \
+            -e PLUGINS='YOURLS/antispam' \
             yourls-rune:test
 
       - name: Wait for install to finish (login page appears)
@@ -77,6 +78,23 @@ jobs:
           [ "$root" = "302" ] \
             || { echo "::error::root did not redirect to /admin/ (HTTP $root)"; docker logs yourls; exit 1; }
           echo "OK: installed and root redirects to /admin/"
+
+      - name: Assert the requested plugin was installed (but not auto-activated)
+        run: |
+          # PLUGINS=YOURLS/antispam must land as a plugin.php in the persisted
+          # user/plugins dir, owned by www-data so YOURLS can read it.
+          docker exec yourls test -f /data/user/plugins/antispam/plugin.php \
+            || { echo "::error::plugin was not installed"; docker logs yourls; exit 1; }
+          docker logs yourls 2>&1 | grep -qi "Plugin 'antispam' installeret" \
+            || { echo "::error::no install log line for the plugin"; docker logs yourls; exit 1; }
+          # Activation must stay the user's choice: nothing should be enabled yet.
+          active=$(docker exec yourls mariadb --protocol=socket -S /run/mysqld/mysqld.sock \
+                   -uroot -N -B -e \
+                   "SELECT option_value FROM yourls.yourls_options WHERE option_name='active_plugins';")
+          echo "active_plugins = $active"
+          [ "$active" = "a:0:{}" ] \
+            || { echo "::error::plugins should not be auto-activated (got: $active)"; exit 1; }
+          echo "OK: plugin installed, not auto-activated"
 
       # Regression test for the reverse-proxy setup: a fresh instance configured
       # with an https YOURLS_SITE, reached over http with forwarded headers (as

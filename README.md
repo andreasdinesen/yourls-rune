@@ -40,11 +40,36 @@ supervisor i ét image**:
 | `YOURLS_PASS` | Admin-adgangskode (skjult) | *(påkrævet)* |
 | `YOURLS_SITE` | Site-URL. Tom = auto-detektér (brug den tildelte port). Se [Eget domæne](#eget-domæne-bag-reverse-proxy) | *(tom)* |
 | `YOURLS_PRIVATE` | Kræv login for at oprette links | `true` |
-| `AUTO_UPDATE` | Hent nyeste YOURLS ved hver opstart | `false` |
+| `AUTO_UPDATE` | Hent nyeste YOURLS (og opdatér plugins) ved hver opstart | `false` |
+| `PLUGINS` | Plugins at installere, se [Plugins](#plugins) | *(tom)* |
 | `YOURLS_LANG` | Sprog, fx `da_DK` (kræver `.mo`-fil i `user/language`) | *(engelsk)* |
 | `YOURLS_URL_CONVERT` | Nøgleformat: `36` (små bogstaver) / `62` (blandet) | `36` |
 
 Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
+
+## Plugins
+
+YOURLS har ingen indbygget plugin-installer — et plugin er blot en mappe med en
+`plugin.php` i `user/plugins/`. Runen kan hente dem for dig:
+
+Skriv GitHub-repos i **`PLUGINS`**, adskilt med komma:
+
+```
+YOURLS/antispam, MatthewC/yourls-2fa-support
+```
+
+Tryk **Restart**, gå til **Manage Plugins** i YOURLS-admin og **aktivér** dem.
+
+- Find plugins på [github.com/YOURLS/awesome](https://github.com/YOURLS/awesome) (259 stk.).
+- Vil du have en bestemt version/branch: `YOURLS/antispam@master`.
+- Runen **aktiverer aldrig** et plugin automatisk — det er dit valg, og aktivering
+  gemmes i databasen.
+- Allerede installerede plugins røres ikke ved genstart. Slår du `AUTO_UPDATE` til,
+  hentes de forfra hver opstart (så de følger med opstrøms).
+- Fejler en download (fx forkert navn), logges det og YOURLS starter alligevel.
+
+Plugins ligger i `/data/user/plugins/` og overlever opdateringer. Du kan også lægge
+dem manuelt der via yggdrasils **Files**-fane — fx et plugin der ikke er på GitHub.
 
 ## Eget domæne bag reverse proxy
 
