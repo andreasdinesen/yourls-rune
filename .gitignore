@@ -1,0 +1,4 @@
+# Local test volume (DB, secrets, session data — never commit)
+data/
+*.tmp
+*.part

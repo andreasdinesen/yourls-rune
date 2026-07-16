@@ -1,0 +1,68 @@
+gameskill:
+  id: yourls
+  name: "YOURLS"
+  category: "Apps"
+  description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
+  author: "andreasdinesen"
+  version: 1
+  icon: "app"
+
+  # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
+  # root so MariaDB and Apache can start; only /data is persisted.
+  docker:
+    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    keep_entrypoint: true
+    data_path: "/data"
+    user: "0:0"
+
+  install:
+    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    script: |
+      mkdir -p /data
+      echo "Klar. Tryk Start, vent lidt, og log ind på /admin/ med din admin-bruger."
+
+  variables:
+    - key: YOURLS_USER
+      name: "Admin-brugernavn"
+      type: string
+      default: "admin"
+      required: true
+    - key: YOURLS_PASS
+      name: "Admin-adgangskode (skjules)"
+      type: string
+      default: ""
+      required: true
+      secret: true
+    - key: YOURLS_SITE
+      name: "Site-URL (lad stå tom for auto-detektering; sæt fx https://kort.dit-domæne.dk ved eget domæne)"
+      type: string
+      default: ""
+    - key: YOURLS_PRIVATE
+      name: "Privat — kræv login for at oprette links (anbefalet)"
+      type: bool
+      default: true
+    - key: AUTO_UPDATE
+      name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version)"
+      type: bool
+      default: false
+    - key: YOURLS_LANG
+      name: "Sprog, fx da_DK (kræver .mo-fil i user/language; tom = engelsk)"
+      type: string
+      default: ""
+    - key: YOURLS_URL_CONVERT
+      name: "Nøgleformat: 36 = kun små bogstaver, 62 = blandet"
+      type: select
+      options: ["36", "62"]
+      default: "36"
+
+  # Empty command + keep_entrypoint => the image's ENTRYPOINT (supervisord) runs.
+  # Apache logs "AH00094: Command line: ..." once it is serving.
+  startup:
+    command: ""
+    done_regex: 'Command line:'
+
+  ports:
+    - { name: web, default: 8080, protocol: tcp }
+
+  backup:
+    include: ["."]

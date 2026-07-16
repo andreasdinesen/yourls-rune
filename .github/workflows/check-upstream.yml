@@ -1,0 +1,68 @@
+name: Check for new YOURLS version
+
+# Daily: if YOURLS ships a newer release AND the official image tag exists, bump
+# the Dockerfile + rune version, commit, and dispatch the build workflow on the
+# new commit (a GITHUB_TOKEN push does not itself trigger on:push).
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine current and latest versions
+        id: v
+        run: |
+          current=$(grep -m1 -E '^ARG YOURLS_VERSION=' Dockerfile | cut -d= -f2)
+          latest=$(curl -fsSL https://api.github.com/repos/YOURLS/YOURLS/releases/latest \
+                   | jq -r .tag_name | sed 's/^v//')
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest"   >> "$GITHUB_OUTPUT"
+          newer=false
+          if [ -n "$latest" ] && [ "$latest" != "$current" ] \
+             && [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)" = "$latest" ]; then
+            newer=true
+          fi
+          echo "newer=$newer" >> "$GITHUB_OUTPUT"
+          echo "current=$current latest=$latest newer=$newer"
+
+      - name: Verify the official image tag is published
+        id: img
+        if: steps.v.outputs.newer == 'true'
+        run: |
+          latest="${{ steps.v.outputs.latest }}"
+          if curl -fsSL "https://hub.docker.com/v2/repositories/library/yourls/tags/${latest}-apache" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::yourls:${latest}-apache is not on Docker Hub yet; retrying tomorrow"
+          fi
+
+      - name: Bump version, commit, and dispatch build
+        if: steps.v.outputs.newer == 'true' && steps.img.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest="${{ steps.v.outputs.latest }}"
+          sed -i -E "s/^(ARG YOURLS_VERSION=).*/\1${latest}/" Dockerfile
+          runever=$(grep -m1 -E '^  version:' runes/yourls.yaml | grep -oE '[0-9]+' | head -1)
+          next=$((runever + 1))
+          sed -i -E "s/^(  version:) .*/\1 ${next}/" runes/yourls.yaml
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile runes/yourls.yaml
+          git commit -m "chore: opdater YOURLS til ${latest} (rune v${next})"
+          git push
+
+          # Build the just-pushed commit (main HEAD).
+          gh workflow run build.yml --ref main

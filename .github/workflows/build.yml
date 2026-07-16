@@ -1,0 +1,112 @@
+name: Build and publish image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - 'README.md'
+      - 'runes/**'
+  schedule:
+    - cron: '30 4 * * 1' # weekly rebuild to pick up base-image security patches
+  workflow_dispatch:
+  workflow_call: # invoked by check-upstream.yml after a version bump
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # Fast end-to-end smoke test on amd64 before publishing the multi-arch image.
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: yourls-rune:test
+
+      - name: Run the container
+        run: |
+          docker run -d --name yourls -p 8080:8080 \
+            -e YOURLS_USER=admin \
+            -e YOURLS_PASS=test1234 \
+            -e YOURLS_PRIVATE= \
+            yourls-rune:test
+
+      - name: Wait for YOURLS to come up
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/admin/ || true)
+            echo "attempt $i -> HTTP $code"
+            if [ "$code" = "200" ] || [ "$code" = "302" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::YOURLS did not become ready"
+          docker logs yourls
+          exit 1
+
+      - name: Assert the admin area requires login (empty YOURLS_PRIVATE trap)
+        run: |
+          # With YOURLS_PRIVATE deliberately blank (as yggdrasil sends it), the
+          # admin page must still redirect/serve the login, not open access.
+          body=$(curl -s http://localhost:8080/admin/)
+          echo "$body" | grep -qiE 'password|log ?in|login' \
+            || { echo "::error::admin area did not present a login"; docker logs yourls; exit 1; }
+          echo "OK: login required"
+
+      - name: Assert the database is installed (no install prompt)
+        run: |
+          # A correctly installed instance serves the public homepage 200/302,
+          # not the installer.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
+          echo "homepage -> HTTP $code"
+          docker logs yourls | grep -i "Table 'yourls_url' created" \
+            || docker logs yourls | grep -qi "allerede installeret" \
+            || { echo "::error::YOURLS tables were not installed"; docker logs yourls; exit 1; }
+          echo "OK: installed"
+
+      - name: Dump logs
+        if: always()
+        run: docker logs yourls || true
+
+  publish:
+    needs: smoke-test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          # Attestation layers add unknown/unknown manifest entries that older
+          # Docker on the yggdrasil host fails to pull — keep them off.
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
