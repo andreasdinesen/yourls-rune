@@ -92,6 +92,18 @@ Tryk **Restart**, gå til **Manage Plugins** i YOURLS-admin og **aktivér** dem.
   hentes de forfra hver opstart (så de følger med opstrøms).
 - Fejler en download (fx forkert navn), logges det og YOURLS starter alligevel.
 
+### Fjerne et plugin
+
+Slet det fra `PLUGINS` og tryk **Restart** — så afinstalleres det. Var det aktiveret,
+opdager YOURLS selv at filerne er væk og fjerner det fra listen over aktive plugins.
+
+Runen sætter en skjult `.rune-installed`-fil i de mapper den selv installerer, og rører
+**kun** dem. YOURLS' egne medfølgende plugins (Sample Plugin, YOURLS Toolbar, Random
+Backgrounds m.fl.) og alt du selv har uploadet via **Files**, bliver aldrig slettet.
+
+Plugins installeret før rune v6 mangler den markering, så dem skal du fjerne én gang
+manuelt under **Files** → `/data/user/plugins/<mappe>`. Derefter klarer `PLUGINS` det.
+
 Plugins ligger i `/data/user/plugins/` og overlever opdateringer. Du kan også lægge
 dem manuelt der via yggdrasils **Files**-fane — fx et plugin der ikke er på GitHub.
 

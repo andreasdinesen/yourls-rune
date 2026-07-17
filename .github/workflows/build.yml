@@ -124,6 +124,39 @@ jobs:
             *) echo "::error::/yourls.qr did not redirect to the QR service"; docker logs yourls; exit 1 ;;
           esac
 
+      - name: Assert dropping a plugin from PLUGINS uninstalls it
+        run: |
+          docker volume create prunevol >/dev/null
+          # First boot: the plugin is requested and installed.
+          docker run -d --name prune1 -v prunevol:/data \
+            -e YOURLS_USER=admin -e YOURLS_PASS=test1234 \
+            -e PLUGINS='YOURLS/antispam' yourls-rune:test >/dev/null
+          for i in $(seq 1 45); do
+            docker exec prune1 test -f /data/user/plugins/antispam/plugin.php 2>/dev/null && break
+            sleep 2
+          done
+          docker exec prune1 test -f /data/user/plugins/antispam/plugin.php \
+            || { echo "::error::plugin not installed on first boot"; docker logs prune1; exit 1; }
+          docker rm -f prune1 >/dev/null
+
+          # Second boot on the same data, with the plugin no longer requested.
+          docker run -d --name prune2 -v prunevol:/data \
+            -e YOURLS_USER=admin -e YOURLS_PASS=test1234 \
+            -e PLUGINS='' yourls-rune:test >/dev/null
+          for i in $(seq 1 45); do
+            docker logs prune2 2>&1 | grep -q "Klargøring færdig" && break
+            sleep 2
+          done
+          if docker exec prune2 test -f /data/user/plugins/antispam/plugin.php; then
+            echo "::error::plugin survived removal from PLUGINS"; docker logs prune2; exit 1
+          fi
+          # YOURLS' own bundled plugins carry no marker and must never be pruned.
+          docker exec prune2 test -f /data/user/plugins/sample-plugin/plugin.php \
+            || { echo "::error::a bundled YOURLS plugin was wrongly removed"; docker logs prune2; exit 1; }
+          echo "OK: prune removes our plugins and spares YOURLS' bundled ones"
+          docker rm -f prune2 >/dev/null
+          docker volume rm prunevol >/dev/null
+
       # Regression test for the reverse-proxy setup: a fresh instance configured
       # with an https YOURLS_SITE, reached over http with forwarded headers (as
       # nginx-proxy-manager does). Without honoring X-Forwarded-Proto this both

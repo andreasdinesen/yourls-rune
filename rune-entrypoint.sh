@@ -122,6 +122,18 @@ fi
 # under user/plugins. Fetch each requested GitHub repo into the persisted plugins
 # dir. We deliberately never auto-activate — activation is the user's call in the
 # admin's "Manage Plugins" page, and it is stored in the database.
+plugin_name_of() { # $1 = spec -> the folder name, or empty if the spec is invalid
+    local spec="$1"
+    spec="${spec#http://github.com/}"
+    spec="${spec#https://github.com/}"
+    spec="${spec%/}"
+    spec="${spec%.git}"
+    case "$spec" in *@*) spec="${spec%@*}" ;; esac
+    case "$spec" in
+        */*) printf '%s' "${spec#*/}" ;;
+        *)   printf '' ;;
+    esac
+}
 install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
     local spec="$1" ref="" name url tmp found src dest
     spec="${spec#http://github.com/}"
@@ -129,11 +141,10 @@ install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
     spec="${spec%/}"
     spec="${spec%.git}"
     case "$spec" in *@*) ref="${spec##*@}"; spec="${spec%@*}" ;; esac
-    case "$spec" in
-        */*) : ;;
-        *) log "Plugin '$1' ignoreret (forventer owner/repo)"; return 0 ;;
-    esac
-    name="${spec#*/}"
+    name="$(plugin_name_of "$1")"
+    if [ -z "$name" ]; then
+        log "Plugin '$1' ignoreret (forventer owner/repo)"; return 0
+    fi
     dest="$DATA/user/plugins/$name"
 
     # Already installed: leave it alone unless AUTO_UPDATE asks for a refresh.
@@ -162,16 +173,40 @@ install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
     rm -rf "$dest"
     mkdir -p "$dest"
     cp -a "$src/." "$dest/"
+    # Mark it as ours so prune_plugins may remove it later. YOURLS' own bundled
+    # plugins and anything uploaded by hand never carry this, so they are safe.
+    : > "$dest/.rune-installed"
     rm -rf "$tmp"
     log "Plugin '$name' installeret (aktivér det under Manage Plugins)"
 }
+# Drop plugins we installed earlier that are no longer listed in PLUGINS, so
+# clearing the field actually uninstalls. Only marked folders are touched.
+prune_plugins() { # $1 = space-separated list of still-wanted folder names
+    local marker dir name
+    [ -d "$DATA/user/plugins" ] || return 0
+    for marker in "$DATA/user/plugins"/*/.rune-installed; do
+        [ -f "$marker" ] || continue
+        dir="$(dirname "$marker")"
+        name="$(basename "$dir")"
+        case " $1 " in
+            *" $name "*) continue ;;
+        esac
+        rm -rf "$dir"
+        log "Plugin '$name' fjernet (ikke længere i PLUGINS)"
+    done
+}
+_wanted=""
 if [ -n "${PLUGINS:-}" ]; then
     mkdir -p "$DATA/user/plugins"
     for _spec in $(printf '%s' "${PLUGINS}" | tr ',;' '  '); do
         [ -n "$_spec" ] || continue
         install_plugin "$_spec" || true
+        _name="$(plugin_name_of "$_spec")"
+        [ -n "$_name" ] && _wanted="$_wanted $_name"
     done
 fi
+# Runs even with an empty PLUGINS: emptying the field removes what we installed.
+prune_plugins "$_wanted"
 
 # --- Bundled QR-code feature (QR_CODE toggle) ---------------------------------
 # YOURLS' own example plugin (yourls.org/docs/development/examples/qrcode): add
