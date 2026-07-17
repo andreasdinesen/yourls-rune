@@ -29,8 +29,9 @@ RUN set -eux; \
 # and a persistent config-extra.php include). Replaces the stock template.
 COPY config-container.php /usr/src/yourls/user/config-container.php
 
-# Redirect the bare site root to /admin/ (no public landing page).
-COPY apache-root-redirect.conf /etc/apache2/conf-enabled/zz-yourls-root.conf
+# Sends the bare site root to /admin/ (no public landing page). The entrypoint
+# drops this into the webroot, where DirectoryIndex picks it up for "/".
+COPY webroot-index.php /usr/local/share/rune-webroot/index.php
 
 # Bundled optional feature: YOURLS' official QR-code example plugin, switched on
 # with the QR_CODE variable. Activation needs the DB, so it runs post-install.

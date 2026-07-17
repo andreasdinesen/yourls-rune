@@ -117,6 +117,10 @@ if [ "$AUTO_UPDATE" = true ]; then
     update_core || log "AUTO_UPDATE fejlede; fortsætter på image-versionen ${YOURLS_RUNE_VERSION}"
 fi
 
+# Landing page for "/" -> /admin/. Added after every core copy above, since
+# YOURLS ships no index at the webroot root and the copies would not carry it.
+cp -a /usr/local/share/rune-webroot/index.php "$WEBROOT/index.php"
+
 # --- Optional plugin installation ---------------------------------------------
 # YOURLS has no plugin installer: a plugin is just a folder holding a plugin.php
 # under user/plugins. Fetch each requested GitHub repo into the persisted plugins

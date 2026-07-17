@@ -78,7 +78,14 @@ jobs:
           echo "root -> HTTP $root"
           [ "$root" = "302" ] \
             || { echo "::error::root did not redirect to /admin/ (HTTP $root)"; docker logs yourls; exit 1; }
-          echo "OK: installed and root redirects to /admin/"
+          # The Location must stay RELATIVE. An absolute one would bake in the
+          # scheme Apache sees (http behind a TLS proxy) and downgrade visitors.
+          loc=$(curl -s -D- -o /dev/null http://localhost:8080/ | tr -d '\r' \
+                | awk 'tolower($1)=="location:"{print $2}')
+          echo "Location: $loc"
+          [ "$loc" = "/admin/" ] \
+            || { echo "::error::root Location must be relative /admin/, got '$loc'"; exit 1; }
+          echo "OK: installed and root redirects to /admin/ without a scheme"
 
       - name: Assert the requested plugin was installed (but not auto-activated)
         run: |
