@@ -41,12 +41,36 @@ supervisor i ét image**:
 | `YOURLS_SITE` | Site-URL. Tom = auto-detektér (brug den tildelte port). Se [Eget domæne](#eget-domæne-bag-reverse-proxy) | *(tom)* |
 | `YOURLS_PRIVATE` | Kræv login for at oprette links | `true` |
 | `AUTO_UPDATE` | Hent nyeste YOURLS (og opdatér plugins) ved hver opstart | `false` |
+| `YOURLS_VERSION` | Pin/manuel opdatering til præcis version, se [Manuel opdatering](#manuel-opdatering-og-versionsvisning) | *(tom = imagets)* |
 | `QR_CODE` | QR-koder: `.qr` på en kort-URL, se [QR-koder](#qr-koder) | `false` |
 | `PLUGINS` | Plugins at installere, se [Plugins](#plugins) | *(tom)* |
 | `YOURLS_LANG` | Sprog, fx `da_DK` (kræver `.mo`-fil i `user/language`) | *(engelsk)* |
 | `YOURLS_URL_CONVERT` | Nøgleformat: `36` (små bogstaver) / `62` (blandet) | `36` |
 
 Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
+
+## Manuel opdatering og versionsvisning
+
+Vil du selv styre hvornår YOURLS opdateres — fx for at kunne tage en backup først —
+så lad `AUTO_UPDATE` være **slået fra** og brug `YOURLS_VERSION`:
+
+1. Se status i **Console**-loggen eller i filen **`YOURLS-VERSION.txt`** under **Files**.
+   Den viser kørende version, imagets version og nyeste udgivelse, og råber op hvis
+   der er en ny version. Opdateres ved hver genstart.
+2. **Tag en backup** under **Backups**-fanen.
+3. Skriv den ønskede version i `YOURLS_VERSION` (fx `1.10.5`) og tryk **Restart**.
+4. Beder YOURLS om det, så kør `/admin/upgrade.php` én gang.
+
+Går opgraderingen galt: **gendan backuppen** og sæt `YOURLS_VERSION` tilbage til den
+gamle version (databasen ligger i backuppen; en ren nedgradering af koden uden
+gendannelse kan give versions-mismatch mod databasen).
+
+- `YOURLS_VERSION` **vinder over** `AUTO_UPDATE` — sat betyder "kør præcis denne".
+- Tom `YOURLS_VERSION` = kør imagets version (som auto-bumpes af den daglige
+  GitHub Action, se ovenfor).
+- Panelets settings-formular kan kun vise statisk tekst, så den *live* versionsstatus
+  bor i Console/Files. YOURLS' egen admin viser også versionen i bunden af hver side
+  og et banner når en ny version findes.
 
 ## QR-koder
 

@@ -83,12 +83,31 @@ cp "$SRC/user/config-container.php" "$DATA/user/config.php"
 [ -f "$DATA/user/config-extra.php" ] || : > "$DATA/user/config-extra.php"
 
 # --- Optional live self-update from YOURLS' GitHub releases -------------------
-update_core() {
-    local current="${YOURLS_RUNE_VERSION:-0}" latest tb tmp src item newer
-    latest="$(curl -fsSL --max-time 20 \
+latest_release() { # prints the newest YOURLS release tag, or nothing on failure
+    curl -fsSL --max-time 15 \
         https://api.github.com/repos/YOURLS/YOURLS/releases/latest 2>/dev/null \
         | grep -m1 '"tag_name"' \
-        | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/')"
+        | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/'
+}
+fetch_core() { # $1 = exact release tag (e.g. 1.10.5) -> overlays it onto the webroot
+    local ver="$1" tb tmp src
+    tb="$DATA/cache/yourls-$ver.tar.gz"
+    if [ ! -s "$tb" ]; then
+        log "Henter YOURLS $ver ..."
+        curl -fsSL --max-time 120 -o "$tb.part" \
+            "https://github.com/YOURLS/YOURLS/archive/refs/tags/$ver.tar.gz" \
+            && mv "$tb.part" "$tb" || { rm -f "$tb.part"; return 1; }
+    fi
+    tmp="$(mktemp -d)"
+    tar -xzf "$tb" -C "$tmp" || { rm -rf "$tmp"; rm -f "$tb"; return 1; }
+    src="$(find "$tmp" -maxdepth 1 -type d -name 'YOURLS-*' | head -1)"
+    [ -n "$src" ] || { rm -rf "$tmp"; return 1; }
+    copy_core "$src"
+    rm -rf "$tmp"
+}
+update_core() { # AUTO_UPDATE: follow the newest release
+    local current="${YOURLS_RUNE_VERSION:-0}" latest newer
+    latest="$(latest_release)"
     [ -n "$latest" ] || { log "AUTO_UPDATE: kunne ikke hente seneste version"; return 1; }
     if [ "$latest" = "$current" ]; then
         log "AUTO_UPDATE: allerede nyeste ($current)"; return 0
@@ -98,28 +117,71 @@ update_core() {
         log "AUTO_UPDATE: image ($current) er nyere end release ($latest); beholder image"
         return 0
     fi
-    tb="$DATA/cache/yourls-$latest.tar.gz"
-    if [ ! -s "$tb" ]; then
-        log "AUTO_UPDATE: henter YOURLS $latest ..."
-        curl -fsSL --max-time 120 -o "$tb.part" \
-            "https://github.com/YOURLS/YOURLS/archive/refs/tags/$latest.tar.gz" \
-            && mv "$tb.part" "$tb" || { rm -f "$tb.part"; return 1; }
-    fi
-    tmp="$(mktemp -d)"
-    tar -xzf "$tb" -C "$tmp" || { rm -rf "$tmp"; return 1; }
-    src="$(find "$tmp" -maxdepth 1 -type d -name 'YOURLS-*' | head -1)"
-    [ -n "$src" ] || { rm -rf "$tmp"; return 1; }
-    copy_core "$src"
-    rm -rf "$tmp"
+    fetch_core "$latest" || return 1
     log "AUTO_UPDATE: opdateret til YOURLS $latest (kør evt. /admin/upgrade.php hvis promptet)"
 }
-if [ "$AUTO_UPDATE" = true ]; then
+
+# --- Core version selection ---------------------------------------------------
+# Priority: an explicit YOURLS_VERSION pin > AUTO_UPDATE latest > image version.
+# The pin is the manual-update path: take a backup, set the version, restart.
+# NOTE: the base image also ships ENV YOURLS_VERSION=<bundled>; when the panel
+# has never saved the variable, that value leaks through and equals the image
+# version, which the comparison below turns into a no-op — exactly right.
+PIN="$(printf '%s' "${YOURLS_VERSION:-}" | tr -d ' ')"
+PIN="${PIN#v}"
+case "$PIN" in
+    *[!0-9.]*) log "YOURLS_VERSION '$PIN' er ugyldig (forventer fx 1.10.5); ignorerer"; PIN="" ;;
+esac
+if [ -n "$PIN" ] && [ "$PIN" != "$YOURLS_RUNE_VERSION" ]; then
+    [ "$AUTO_UPDATE" = true ] && log "YOURLS_VERSION er sat; AUTO_UPDATE ignoreres"
+    if fetch_core "$PIN"; then
+        log "YOURLS $PIN installeret (manuelt valgt; imaget indeholder $YOURLS_RUNE_VERSION)"
+    else
+        log "Kunne ikke hente YOURLS $PIN; kører imagets version $YOURLS_RUNE_VERSION"
+    fi
+elif [ "$AUTO_UPDATE" = true ]; then
     update_core || log "AUTO_UPDATE fejlede; fortsætter på image-versionen ${YOURLS_RUNE_VERSION}"
 fi
 
 # Landing page for "/" -> /admin/. Added after every core copy above, since
 # YOURLS ships no index at the webroot root and the copies would not carry it.
 cp -a /usr/local/share/rune-webroot/index.php "$WEBROOT/index.php"
+
+# --- Version report -----------------------------------------------------------
+# The panel's settings form can only show static text, so the live status goes
+# where it can be seen: the Console log and /data/YOURLS-VERSION.txt (Files tab).
+RUNNING_VERSION="$(sed -n "s/.*define( *'YOURLS_VERSION', *'\([^']*\)'.*/\1/p" \
+    "$WEBROOT/includes/version.php" 2>/dev/null | head -1)"
+[ -n "$RUNNING_VERSION" ] || RUNNING_VERSION="$YOURLS_RUNE_VERSION"
+LATEST_VERSION="$(latest_release || true)"
+{
+    echo "YOURLS-version"
+    echo "=============="
+    echo "Kører:            $RUNNING_VERSION"
+    echo "Image indeholder: $YOURLS_RUNE_VERSION"
+    echo "Nyeste udgivelse: ${LATEST_VERSION:-(kunne ikke tjekkes)}"
+    echo ""
+    if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "$RUNNING_VERSION" ] \
+       && [ "$(printf '%s\n%s\n' "$RUNNING_VERSION" "$LATEST_VERSION" | sort -V | tail -1)" = "$LATEST_VERSION" ]; then
+        echo "NY VERSION TILGÆNGELIG: $LATEST_VERSION"
+        echo ""
+        echo "Manuel opdatering:"
+        echo "  1. Tag en backup under Backups-fanen"
+        echo "  2. Sæt YOURLS_VERSION=$LATEST_VERSION i Settings"
+        echo "  3. Tryk Restart (kør /admin/upgrade.php hvis YOURLS beder om det)"
+        echo ""
+        echo "Går noget galt: gendan backuppen og sæt YOURLS_VERSION tilbage."
+    elif [ -n "$LATEST_VERSION" ]; then
+        echo "Du kører den nyeste version."
+    fi
+    echo ""
+    echo "Tjekket: $(date -u '+%Y-%m-%d %H:%M UTC') (opdateres ved hver genstart)"
+} > "$DATA/YOURLS-VERSION.txt"
+log "YOURLS-version: kører $RUNNING_VERSION, image $YOURLS_RUNE_VERSION, nyeste ${LATEST_VERSION:-ukendt}"
+if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "$RUNNING_VERSION" ] \
+   && [ "$(printf '%s\n%s\n' "$RUNNING_VERSION" "$LATEST_VERSION" | sort -V | tail -1)" = "$LATEST_VERSION" ]; then
+    log "NY YOURLS-VERSION TILGÆNGELIG: $LATEST_VERSION — tag backup og sæt YOURLS_VERSION=$LATEST_VERSION (se /data/YOURLS-VERSION.txt)"
+fi
 
 # --- Optional plugin installation ---------------------------------------------
 # YOURLS has no plugin installer: a plugin is just a folder holding a plugin.php

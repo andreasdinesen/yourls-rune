@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 7
+  version: 8
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
@@ -48,6 +48,12 @@ gameskill:
       name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version). Opdaterer også plugins nedenfor"
       type: bool
       default: false
+    # Manual, controlled updates: back up first, set the version, restart. Wins
+    # over AUTO_UPDATE. Live status is written to Console + /data/YOURLS-VERSION.txt.
+    - key: YOURLS_VERSION
+      name: "YOURLS-version — tom = imagets version. Manuel opdatering: tag backup, skriv fx 1.10.5, tryk Restart. Kørende/nyeste version står i Console-loggen og i filen YOURLS-VERSION.txt under Files"
+      type: string
+      default: ""
     # Unlike PLUGINS, this one both installs AND activates — it is a feature
     # switch, so the toggle is authoritative and re-applied on every start.
     - key: QR_CODE

@@ -131,6 +131,30 @@ jobs:
             *) echo "::error::/yourls.qr did not redirect to the QR service"; docker logs yourls; exit 1 ;;
           esac
 
+      - name: Assert YOURLS_VERSION pins an exact core version
+        run: |
+          # 1.10.3 is a real, older release; the pin must win over the image's
+          # bundled version and be reported in the version file.
+          docker run -d --name yourls-pin \
+            -e YOURLS_USER=admin -e YOURLS_PASS=test1234 \
+            -e YOURLS_VERSION=1.10.3 yourls-rune:test >/dev/null
+          for i in $(seq 1 45); do
+            docker logs yourls-pin 2>&1 | grep -q "Klargøring færdig" && break
+            sleep 2
+          done
+          ver=$(docker exec yourls-pin sed -n "s/.*define( *'YOURLS_VERSION', *'\([^']*\)'.*/\1/p" \
+                /var/www/html/includes/version.php | head -1)
+          echo "running core: $ver"
+          [ "$ver" = "1.10.3" ] \
+            || { echo "::error::pinned version not installed (got '$ver')"; docker logs yourls-pin; exit 1; }
+          docker exec yourls-pin grep -q "Kører:            1.10.3" /data/YOURLS-VERSION.txt \
+            || { echo "::error::version report file wrong/missing"; docker exec yourls-pin cat /data/YOURLS-VERSION.txt || true; exit 1; }
+          # An older pin means the report must announce the newer release.
+          docker exec yourls-pin grep -q "NY VERSION TILGÆNGELIG" /data/YOURLS-VERSION.txt \
+            || { echo "::error::update notice missing from version report"; docker exec yourls-pin cat /data/YOURLS-VERSION.txt; exit 1; }
+          echo "OK: pin works and the report flags the newer release"
+          docker rm -f yourls-pin >/dev/null
+
       - name: Assert dropping a plugin from PLUGINS uninstalls it
         run: |
           docker volume create prunevol >/dev/null
