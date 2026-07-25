@@ -62,8 +62,16 @@ så lad `AUTO_UPDATE` være **slået fra** og brug `YOURLS_VERSION`:
 4. Beder YOURLS om det, så kør `/admin/upgrade.php` én gang.
 
 Går opgraderingen galt: **gendan backuppen** og sæt `YOURLS_VERSION` tilbage til den
-gamle version (databasen ligger i backuppen; en ren nedgradering af koden uden
-gendannelse kan give versions-mismatch mod databasen).
+gamle version (en ren nedgradering af koden uden gendannelse kan give
+versions-mismatch mod databasen).
+
+**Om backup-indholdet:** Backuppen indeholder `user/` (config, plugins, sider),
+`db-dump/yourls.sql` (mysqldump, opdateres hver 6. time), `secrets/` og
+`YOURLS-VERSION.txt` — men bevidst **ikke** de rå `mysql/`-filer: de er
+ulæselige for panelets backup-bruger, og en kopi af en kørende database ville
+alligevel være inkonsistent. Ved gendannelse starter containeren derfor med tom
+database og importerer automatisk `db-dump/yourls.sql` (links oprettet efter
+seneste dump — op til 6 timer — kan mangle).
 
 - `YOURLS_VERSION` **vinder over** `AUTO_UPDATE` — sat betyder "kør præcis denne".
 - Tom `YOURLS_VERSION` = kør imagets version (som auto-bumpes af den daglige

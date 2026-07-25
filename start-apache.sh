@@ -30,6 +30,20 @@ GRANT ALL PRIVILEGES ON \`yourls\`.* TO 'yourls'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
 
+# Restore path: a panel backup carries db-dump/yourls.sql but not the raw
+# mysql/ files, so a restored volume boots with an empty database. Import the
+# dump exactly then — an empty dump or live tables must never trigger this.
+TABLES="$(mariadb --protocol=socket -S "$SOCK" -uroot -N -e \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='yourls'" 2>/dev/null || echo 0)"
+if [ "${TABLES:-0}" = "0" ] && [ -s "$DATA/db-dump/yourls.sql" ]; then
+    log "Tom database, men db-dump/yourls.sql findes — gendanner fra dump ..."
+    if mariadb --protocol=socket -S "$SOCK" -uroot < "$DATA/db-dump/yourls.sql"; then
+        log "Database gendannet fra dump"
+    else
+        log "Gendannelse fra dump fejlede; YOURLS-installeren opretter en frisk database"
+    fi
+fi
+
 # Trigger YOURLS' own web installer once Apache is serving. Running it over HTTP
 # uses YOURLS' full, correct init (unlike a trimmed CLI bootstrap), needs no
 # nonce (install.php reads $_REQUEST['install']), and is idempotent — on a boot

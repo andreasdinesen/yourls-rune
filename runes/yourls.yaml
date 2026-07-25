@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 8
+  version: 9
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
@@ -86,4 +86,7 @@ gameskill:
     - { name: web, default: 8080, protocol: tcp }
 
   backup:
-    include: ["."]
+    # Raw mysql/ files are owned by the container's mysql uid and unreadable for
+    # the panel's backup user — and a hot copy would be inconsistent anyway.
+    # db-dump/ holds a mysqldump (refreshed every 6 h) which is the restorable copy.
+    include: ["user", "db-dump", "secrets", "YOURLS-VERSION.txt"]
