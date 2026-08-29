@@ -1,11 +1,11 @@
 # All-in-one YOURLS image for yggdrasil: YOURLS + MariaDB + supervisor in one
 # container, so no separate database rune is needed. Built on the official YOURLS
 # image; bumping YOURLS_VERSION is the only change needed to ship a new version.
-ARG YOURLS_VERSION=1.10.4
+ARG YOURLS_VERSION=1.10.5
 FROM yourls:${YOURLS_VERSION}-apache
 
 # Re-declare after FROM so the value is available in the following layers.
-ARG YOURLS_VERSION=1.10.4
+ARG YOURLS_VERSION=1.10.5
 # The core version baked into this image (used by the AUTO_UPDATE comparison).
 ENV YOURLS_RUNE_VERSION=${YOURLS_VERSION}
 
