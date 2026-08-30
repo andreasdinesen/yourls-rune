@@ -175,9 +175,17 @@ jobs:
           [ "$ver" = "1.10.6" ] \
             || { echo "::error::Update pin-file did not install 1.10.6 (got '$ver')"; docker logs yourls-login; exit 1; }
           # Real login with the NO_HASH plaintext password on the new auth code.
+          # 1.10.5+ requires the admin_login nonce, so scrape it from the form first
+          # (same cookie jar throughout, exactly as a browser does).
           jar=$(mktemp)
+          page=$(curl -s -c "$jar" http://localhost:8090/admin/)
+          nonce=$(echo "$page" | grep -oE 'name="nonce"[^>]*value="[a-f0-9]+"' \
+                  | grep -oE '[a-f0-9]{6,}' | head -1)
+          echo "login nonce = ${nonce:-<none>}"
+          [ -n "$nonce" ] || { echo "::error::could not find login nonce in the form"; echo "$page" | head -40; exit 1; }
           curl -s -c "$jar" -b "$jar" -o /dev/null \
             --data-urlencode 'username=admin' --data-urlencode 'password=s3cr3t-pw' \
+            --data-urlencode "nonce=$nonce" \
             http://localhost:8090/admin/index.php
           body=$(curl -s -c "$jar" -b "$jar" http://localhost:8090/admin/)
           if echo "$body" | grep -qi 'name="password"'; then
