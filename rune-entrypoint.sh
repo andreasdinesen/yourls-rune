@@ -109,6 +109,10 @@ env_pin="$(sanitize_ver "${YOURLS_VERSION:-}")"
 case "$env_pin" in
     *[!0-9.]*) [ -n "$env_pin" ] && log "YOURLS_VERSION '$env_pin' ugyldig (forventer fx 1.10.6); ignorerer"; env_pin="" ;;
 esac
+# The base image ships ENV YOURLS_VERSION=<bundled>. When the panel variable is
+# unset that value leaks in; treat "same as image" as unset so it does not shadow
+# the Update button's pin file. (Pinning to the image version is a no-op anyway.)
+[ "$env_pin" = "$YOURLS_RUNE_VERSION" ] && env_pin=""
 file_pin=""
 [ -s "$DATA/core-version" ] && file_pin="$(sanitize_ver "$(cat "$DATA/core-version" 2>/dev/null)")"
 case "$file_pin" in *[!0-9.]*) file_pin="" ;; esac
