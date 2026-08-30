@@ -81,7 +81,7 @@ extract_release() { # $1 = tag -> prints extracted source dir on stdout, or fail
     tb="$DATA/cache/yourls-$ver.tar.gz"
     if [ ! -s "$tb" ]; then
         log "Henter YOURLS $ver ..."
-        curl -fsSL --max-time 120 -o "$tb.part" \
+        curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --max-time 120 -o "$tb.part" \
             "https://github.com/YOURLS/YOURLS/archive/refs/tags/$ver.tar.gz" \
             && mv "$tb.part" "$tb" || { rm -f "$tb.part"; return 1; }
     fi
@@ -241,7 +241,7 @@ install_plugin() { # $1 = "owner/repo", "owner/repo@ref", or a GitHub URL
     [ -n "$ref" ] && url="$url/$ref"
 
     tmp="$(mktemp -d)"
-    if ! curl -fsSL --max-time 60 "$url" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null; then
+    if ! curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --max-time 60 "$url" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null; then
         rm -rf "$tmp"; log "Plugin '$spec': kunne ikke hentes"; return 1
     fi
     # GitHub tarballs unpack to <owner>-<repo>-<sha>/; plugin.php sits at that

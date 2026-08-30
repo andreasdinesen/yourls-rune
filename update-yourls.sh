@@ -18,7 +18,7 @@ mkdir -p "$DATA/cache"
 tb="$DATA/cache/yourls-$latest.tar.gz"
 if [ ! -s "$tb" ]; then
     echo "Henter YOURLS $latest ..."
-    curl -fsSL --max-time 180 -o "$tb.part" \
+    curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors --max-time 180 -o "$tb.part" \
         "https://github.com/YOURLS/YOURLS/archive/refs/tags/$latest.tar.gz"
     mv "$tb.part" "$tb"
 fi
