@@ -183,12 +183,12 @@ LATEST_VERSION="$(latest_release || true)"
        && [ "$(printf '%s\n%s\n' "$RUNNING_VERSION" "$LATEST_VERSION" | sort -V | tail -1)" = "$LATEST_VERSION" ]; then
         echo "NY VERSION TILGÆNGELIG: $LATEST_VERSION"
         echo ""
-        echo "Manuel opdatering:"
+        echo "Sådan opdaterer du:"
         echo "  1. Tag en backup under Backups-fanen"
-        echo "  2. Sæt YOURLS_VERSION=$LATEST_VERSION i Settings"
-        echo "  3. Tryk Restart (kør /admin/upgrade.php hvis YOURLS beder om det)"
+        echo "  2. Tryk knappen 'Opdater YOURLS til nyeste' på serversiden"
+        echo "     (kør /admin/upgrade.php hvis YOURLS beder om det)"
         echo ""
-        echo "Går noget galt: gendan backuppen og sæt YOURLS_VERSION tilbage."
+        echo "Går noget galt: gendan backuppen (og ryd evt. YOURLS_VERSION-feltet)."
     elif [ -n "$LATEST_VERSION" ]; then
         echo "Du kører den nyeste version."
     fi
@@ -198,7 +198,7 @@ LATEST_VERSION="$(latest_release || true)"
 log "YOURLS-version: kører $RUNNING_VERSION, image $YOURLS_RUNE_VERSION, nyeste ${LATEST_VERSION:-ukendt}"
 if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "$RUNNING_VERSION" ] \
    && [ "$(printf '%s\n%s\n' "$RUNNING_VERSION" "$LATEST_VERSION" | sort -V | tail -1)" = "$LATEST_VERSION" ]; then
-    log "NY YOURLS-VERSION TILGÆNGELIG: $LATEST_VERSION — tag backup og sæt YOURLS_VERSION=$LATEST_VERSION (se /data/YOURLS-VERSION.txt)"
+    log "NY YOURLS-VERSION TILGÆNGELIG: $LATEST_VERSION — tag backup og tryk 'Opdater YOURLS til nyeste' (se /data/YOURLS-VERSION.txt)"
 fi
 
 # --- Optional plugin installation ---------------------------------------------

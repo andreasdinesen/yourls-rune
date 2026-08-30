@@ -52,18 +52,29 @@ Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
 ## Manuel opdatering og versionsvisning
 
 Vil du selv styre hvornår YOURLS opdateres — fx for at kunne tage en backup først —
-så lad `AUTO_UPDATE` være **slået fra** og brug `YOURLS_VERSION`:
+så lad `AUTO_UPDATE` være **slået fra** og brug **Opdater-knappen**:
 
 1. Se status i **Console**-loggen eller i filen **`YOURLS-VERSION.txt`** under **Files**.
    Den viser kørende version, imagets version og nyeste udgivelse, og råber op hvis
    der er en ny version. Opdateres ved hver genstart.
 2. **Tag en backup** under **Backups**-fanen.
-3. Skriv den ønskede version i `YOURLS_VERSION` (fx `1.10.5`) og tryk **Restart**.
+3. Tryk knappen **"Opdater YOURLS til nyeste"** på serversiden. Den henter nyeste
+   **stabile** udgivelse og genstarter appen på den.
 4. Beder YOURLS om det, så kør `/admin/upgrade.php` én gang.
 
-Går opgraderingen galt: **gendan backuppen** og sæt `YOURLS_VERSION` tilbage til den
-gamle version (en ren nedgradering af koden uden gendannelse kan give
-versions-mismatch mod databasen).
+Går opgraderingen galt: **gendan backuppen** (og ryd evt. `YOURLS_VERSION`-feltet).
+En ren nedgradering af koden uden gendannelse kan give versions-mismatch mod databasen.
+
+`YOURLS_VERSION`-feltet pinner en **præcis** version (fx `1.10.6`) eller ruller tilbage,
+og **vinder over** både knappen og `AUTO_UPDATE`. Lad det stå **tomt** for at lade
+knappen bestemme — ellers kan knappen ikke ændre versionen. Skriv aldrig et `-dev`-tag
+(fx YOURLS' fejlagtige `1.10.5`, der rapporterer sig som `1.10.5-dev`) — runen advarer i
+loggen hvis du gør.
+
+**Bag reverse proxy:** YOURLS 1.10.5+ gør login-cookien `Secure`. Tilgå derfor admin via
+**domænet** (`https://kort.dit-domæne.dk/admin/`), ikke via IP+port, når `YOURLS_SITE` er
+sat til domænet — ellers kan cookien ikke sætte sig og login fejler. Proxyen skal sende
+`X-Forwarded-Proto: https` (nginx-proxy-manager gør det som standard).
 
 **Om backup-indholdet:** Backuppen indeholder `user/` (config, plugins, sider),
 `db-dump/yourls.sql` (mysqldump, opdateres hver 6. time), `secrets/` og
