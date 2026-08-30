@@ -53,10 +53,18 @@ define( 'YOURLS_DB_PREFIX', getenv_container('YOURLS_DB_PREFIX', 'yourls_') );
  ** works on whatever port yggdrasil assigns and behind a reverse proxy. */
 $__yourls_site = trim((string) getenv_container('YOURLS_SITE', ''));
 if ($__yourls_site !== '' && !preg_match('@^https?://@i', $__yourls_site)) {
-    // A bare domain ("yourls.example.com") is not a valid YOURLS_SITE — YOURLS
-    // needs a scheme. Assume https, which is what a public domain almost always
-    // means behind a proxy.
-    $__yourls_site = 'https://' . ltrim($__yourls_site, '/');
+    // Accept a scheme-less hostname ("kort.example.com") by assuming https — but
+    // ONLY if it actually looks like a hostname (has a dot, or is localhost).
+    // A bare single label like "yourls" is almost always a mistake (e.g. the
+    // yggdrasil subdomain label pasted here); turning it into "https://yourls"
+    // breaks every asset URL, cookie and login. Ignore it and fall back to
+    // auto-detecting the real host from the request instead.
+    $__host_part = strtok($__yourls_site, '/');
+    if (strpos($__host_part, '.') !== false || $__host_part === 'localhost') {
+        $__yourls_site = 'https://' . ltrim($__yourls_site, '/');
+    } else {
+        $__yourls_site = '';
+    }
 }
 if ($__yourls_site === '') {
     $__proto = 'http';

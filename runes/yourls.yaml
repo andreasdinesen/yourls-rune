@@ -4,7 +4,7 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 14
+  version: 15
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
@@ -45,7 +45,7 @@ gameskill:
     # it tells YOURLS its own address, it does not make the domain work. Setting
     # it to a domain that isn't reachable yet locks you out of port access too.
     - key: YOURLS_SITE
-      name: "Site-URL — lad stå TOM til at bruge den tildelte port. Sæt kun fx https://kort.dit-domæne.dk når DNS + reverse proxy peger herpå"
+      name: "Site-URL — lad stå TOM (anbefalet: adressen auto-detekteres). Skal du sætte den, brug det FULDE domæne med https://, fx https://yourls.dine.dk — IKKE bare 'yourls'. Kun når DNS + reverse proxy peger herpå"
       type: string
       default: ""
     - key: YOURLS_PRIVATE

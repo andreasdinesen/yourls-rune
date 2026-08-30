@@ -56,6 +56,13 @@ AUTO_UPDATE="$(norm_bool AUTO_UPDATE false)"
 # Exported: start-apache.sh applies this to active_plugins once the DB is up.
 export QR_CODE="$(norm_bool QR_CODE false)"
 
+# Warn about a common Site-URL mistake: a single-label value like "yourls" is not
+# a host. config.php ignores it and auto-detects, but flag it so it is visible.
+case "${YOURLS_SITE:-}" in
+    ""|*://*|*.*|localhost) : ;;
+    *) log "ADVARSEL: YOURLS_SITE='${YOURLS_SITE}' ligner ikke et domæne (mangler punktum) — ignoreres, adressen auto-detekteres. Skriv fx https://yourls.dine.dk, eller lad feltet stå tomt." ;;
+esac
+
 # --- YOURLS core helpers ------------------------------------------------------
 # /var/www/html is NOT a volume, so the core is rebuilt from scratch each boot.
 copy_core() { # $1 = source tree -> lays it into a CLEAN webroot (keeps user/)

@@ -258,6 +258,31 @@ jobs:
             || { echo "::error::proxied admin returned $code (redirect loop?)"; docker logs yourls-proxy; exit 1; }
           echo "OK: proxied https instance installs and serves the login"
 
+      - name: Assert a single-label YOURLS_SITE is ignored (auto-detect wins)
+        run: |
+          # A bare "yourls" (a common mistake) must NOT become https://yourls and
+          # break every asset URL — it must fall back to the request's real host.
+          docker run -d --name yourls-badsite -p 8082:8080 \
+            -e YOURLS_USER=admin -e YOURLS_PASS=test1234 \
+            -e YOURLS_SITE=yourls yourls-rune:test >/dev/null
+          for i in $(seq 1 60); do
+            curl -s -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-Host: kort.example.test' \
+              http://localhost:8082/admin/ 2>/dev/null | grep -qi 'name="password"' && break
+            sleep 5
+          done
+          assets=$(curl -s -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-Host: kort.example.test' \
+                   http://localhost:8082/admin/ | grep -oE 'href="[^"]*style.css[^"]*"' | head -1)
+          echo "asset href = $assets"
+          if echo "$assets" | grep -qE 'https?://yourls/'; then
+            echo "::error::single-label YOURLS_SITE became a host — assets point at //yourls/"; exit 1
+          fi
+          echo "$assets" | grep -q 'kort.example.test' \
+            || { echo "::error::assets did not fall back to the request host"; docker logs yourls-badsite; exit 1; }
+          docker logs yourls-badsite 2>&1 | grep -qi "ligner ikke et domæne" \
+            || { echo "::error::no warning logged for the bad YOURLS_SITE"; exit 1; }
+          echo "OK: bogus single-label YOURLS_SITE ignored, auto-detect used"
+          docker rm -f yourls-badsite >/dev/null
+
       - name: Dump logs
         if: always()
         run: |
