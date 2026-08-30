@@ -21,6 +21,14 @@ gameskill:
       mkdir -p /data
       echo "Klar. Tryk Start, vent lidt, og log ind på /admin/ med din admin-bruger."
 
+  # "Opdater YOURLS"-knap på serversiden. Henter nyeste STABILE udgivelse og
+  # vælger den; genstarten bagefter tager den i brug. TAG EN BACKUP FØRST.
+  update:
+    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    label: "Opdater YOURLS til nyeste"
+    script: |
+      /usr/local/bin/update-yourls.sh
+
   variables:
     - key: YOURLS_USER
       name: "Admin-brugernavn"
@@ -48,10 +56,11 @@ gameskill:
       name: "Hent nyeste YOURLS fra GitHub ved hver opstart (ellers følger imagets version). Opdaterer også plugins nedenfor"
       type: bool
       default: false
-    # Manual, controlled updates: back up first, set the version, restart. Wins
-    # over AUTO_UPDATE. Live status is written to Console + /data/YOURLS-VERSION.txt.
+    # Pin an EXACT version (or roll back). Wins over the Update button and
+    # AUTO_UPDATE. Leave empty to let the Update button / image decide. Live
+    # status is written to Console + /data/YOURLS-VERSION.txt.
     - key: YOURLS_VERSION
-      name: "YOURLS-version — tom = imagets version. Manuel opdatering: tag backup, skriv fx 1.10.5, tryk Restart. Kørende/nyeste version står i Console-loggen og i filen YOURLS-VERSION.txt under Files"
+      name: "YOURLS-version (avanceret) — tom anbefales; brug 'Opdater YOURLS'-knappen i stedet. Sæt fx 1.10.6 for at pinne/rulle tilbage. Vinder over knappen. Status står i Console-loggen og i YOURLS-VERSION.txt under Files"
       type: string
       default: ""
     # Unlike PLUGINS, this one both installs AND activates — it is a feature

@@ -56,21 +56,97 @@ AUTO_UPDATE="$(norm_bool AUTO_UPDATE false)"
 # Exported: start-apache.sh applies this to active_plugins once the DB is up.
 export QR_CODE="$(norm_bool QR_CODE false)"
 
-# --- Lay down YOURLS core fresh from the image each boot ----------------------
-# /var/www/html is NOT a volume, so copying core on every start means a newer
-# image automatically ships newer core. Only user/ is persisted (below).
-copy_core() { # $1 = source tree
+# --- YOURLS core helpers ------------------------------------------------------
+# /var/www/html is NOT a volume, so the core is rebuilt from scratch each boot.
+copy_core() { # $1 = source tree -> lays it into a CLEAN webroot (keeps user/)
+    find "$WEBROOT" -mindepth 1 -maxdepth 1 ! -name user -exec rm -rf {} +
     ( cd "$1" && for item in * .[!.]*; do
         [ "$item" = user ] && continue
         [ -e "$item" ] || continue
-        rm -rf "$WEBROOT/$item"
         cp -a "$item" "$WEBROOT/"
     done )
 }
-find "$WEBROOT" -mindepth 1 -maxdepth 1 ! -name user -exec rm -rf {} +
-copy_core "$SRC"
+version_of() { # $1 = a YOURLS tree -> its version.php string, or empty
+    sed -n "s/.*define( *'YOURLS_VERSION', *'\([^']*\)'.*/\1/p" \
+        "$1/includes/version.php" 2>/dev/null | head -1
+}
+latest_release() { # newest STABLE release tag (the API excludes pre-releases)
+    curl -fsSL --max-time 15 \
+        https://api.github.com/repos/YOURLS/YOURLS/releases/latest 2>/dev/null \
+        | grep -m1 '"tag_name"' \
+        | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/'
+}
+extract_release() { # $1 = tag -> prints extracted source dir on stdout, or fails
+    local ver="$1" tb tmp src
+    tb="$DATA/cache/yourls-$ver.tar.gz"
+    if [ ! -s "$tb" ]; then
+        log "Henter YOURLS $ver ..."
+        curl -fsSL --max-time 120 -o "$tb.part" \
+            "https://github.com/YOURLS/YOURLS/archive/refs/tags/$ver.tar.gz" \
+            && mv "$tb.part" "$tb" || { rm -f "$tb.part"; return 1; }
+    fi
+    tmp="$(mktemp -d)"
+    tar -xzf "$tb" -C "$tmp" 2>/dev/null || { rm -rf "$tmp"; rm -f "$tb"; return 1; }
+    src="$(find "$tmp" -maxdepth 1 -type d -name 'YOURLS-*' | head -1)"
+    [ -n "$src" ] || { rm -rf "$tmp"; return 1; }
+    printf '%s' "$src"
+}
+
+# --- Choose which YOURLS core to serve, then lay it down cleanly --------------
+# Priority (highest first):
+#   1. YOURLS_VERSION env  — explicit pin / rollback (power users)
+#   2. /data/core-version  — written by the "Opdater YOURLS" panel button
+#   3. AUTO_UPDATE         — newest stable release, every boot
+#   4. image               — the version bundled in this image
+# NOTE: the base image ships ENV YOURLS_VERSION=<bundled>; an unset panel
+# variable leaks that value through, which equals the image version (a no-op).
+sanitize_ver() { printf '%s' "$1" | tr -d ' \t\r\n' | sed 's/^v//'; }
+CORE_SRC="$SRC"     # image default (/usr/src/yourls)
+CORE_TMP=""         # extracted dir to remove after lay-down
+want=""; why=""
+
+env_pin="$(sanitize_ver "${YOURLS_VERSION:-}")"
+case "$env_pin" in
+    *[!0-9.]*) [ -n "$env_pin" ] && log "YOURLS_VERSION '$env_pin' ugyldig (forventer fx 1.10.6); ignorerer"; env_pin="" ;;
+esac
+file_pin=""
+[ -s "$DATA/core-version" ] && file_pin="$(sanitize_ver "$(cat "$DATA/core-version" 2>/dev/null)")"
+case "$file_pin" in *[!0-9.]*) file_pin="" ;; esac
+
+if [ -n "$env_pin" ]; then
+    want="$env_pin"; why="YOURLS_VERSION"
+    [ "$AUTO_UPDATE" = true ] && log "YOURLS_VERSION er sat; AUTO_UPDATE ignoreres"
+elif [ -n "$file_pin" ]; then
+    want="$file_pin"; why="Opdater-knap"
+elif [ "$AUTO_UPDATE" = true ]; then
+    want="$(latest_release)"; why="AUTO_UPDATE"
+    if [ -n "$want" ]; then
+        newer="$(printf '%s\n%s\n' "$YOURLS_RUNE_VERSION" "$want" | sort -V | tail -1)"
+        [ "$newer" = "$want" ] || { log "AUTO_UPDATE: image ($YOURLS_RUNE_VERSION) >= release ($want); beholder image"; want=""; }
+    else
+        log "AUTO_UPDATE: kunne ikke hente seneste version; beholder image"
+    fi
+fi
+
+if [ -n "$want" ] && [ "$want" != "$YOURLS_RUNE_VERSION" ]; then
+    if _d="$(extract_release "$want")"; then
+        CORE_SRC="$_d"; CORE_TMP="$(dirname "$_d")"
+        _rv="$(version_of "$_d")"
+        case "$_rv" in
+            *-*) log "ADVARSEL: YOURLS $want er mærket som udvikling ($_rv) — kan være ustabil; brug en stabil version (fx nyeste udgivelse)" ;;
+        esac
+        log "YOURLS-kerne: $want valgt via $why (imaget indeholder $YOURLS_RUNE_VERSION)"
+    else
+        log "Kunne ikke hente YOURLS $want ($why); kører imagets $YOURLS_RUNE_VERSION"
+    fi
+fi
+
+copy_core "$CORE_SRC"
+[ -n "$CORE_TMP" ] && rm -rf "$CORE_TMP"
 
 # --- Persist user/ (config, plugins, pages) on the volume ---------------------
+# Seeded from the IMAGE. config-container.php is OUR template (shipped in the
+# image), never the stock one from a fetched release.
 if [ -z "$(ls -A "$DATA/user" 2>/dev/null || true)" ]; then
     cp -a "$SRC/user/." "$DATA/user/"
 fi
@@ -82,69 +158,7 @@ ln -s "$DATA/user" "$WEBROOT/user"
 cp "$SRC/user/config-container.php" "$DATA/user/config.php"
 [ -f "$DATA/user/config-extra.php" ] || : > "$DATA/user/config-extra.php"
 
-# --- Optional live self-update from YOURLS' GitHub releases -------------------
-latest_release() { # prints the newest YOURLS release tag, or nothing on failure
-    curl -fsSL --max-time 15 \
-        https://api.github.com/repos/YOURLS/YOURLS/releases/latest 2>/dev/null \
-        | grep -m1 '"tag_name"' \
-        | sed -E 's/.*"tag_name" *: *"v?([^"]+)".*/\1/'
-}
-fetch_core() { # $1 = exact release tag (e.g. 1.10.5) -> overlays it onto the webroot
-    local ver="$1" tb tmp src
-    tb="$DATA/cache/yourls-$ver.tar.gz"
-    if [ ! -s "$tb" ]; then
-        log "Henter YOURLS $ver ..."
-        curl -fsSL --max-time 120 -o "$tb.part" \
-            "https://github.com/YOURLS/YOURLS/archive/refs/tags/$ver.tar.gz" \
-            && mv "$tb.part" "$tb" || { rm -f "$tb.part"; return 1; }
-    fi
-    tmp="$(mktemp -d)"
-    tar -xzf "$tb" -C "$tmp" || { rm -rf "$tmp"; rm -f "$tb"; return 1; }
-    src="$(find "$tmp" -maxdepth 1 -type d -name 'YOURLS-*' | head -1)"
-    [ -n "$src" ] || { rm -rf "$tmp"; return 1; }
-    copy_core "$src"
-    rm -rf "$tmp"
-}
-update_core() { # AUTO_UPDATE: follow the newest release
-    local current="${YOURLS_RUNE_VERSION:-0}" latest newer
-    latest="$(latest_release)"
-    [ -n "$latest" ] || { log "AUTO_UPDATE: kunne ikke hente seneste version"; return 1; }
-    if [ "$latest" = "$current" ]; then
-        log "AUTO_UPDATE: allerede nyeste ($current)"; return 0
-    fi
-    newer="$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)"
-    if [ "$newer" != "$latest" ]; then
-        log "AUTO_UPDATE: image ($current) er nyere end release ($latest); beholder image"
-        return 0
-    fi
-    fetch_core "$latest" || return 1
-    log "AUTO_UPDATE: opdateret til YOURLS $latest (kør evt. /admin/upgrade.php hvis promptet)"
-}
-
-# --- Core version selection ---------------------------------------------------
-# Priority: an explicit YOURLS_VERSION pin > AUTO_UPDATE latest > image version.
-# The pin is the manual-update path: take a backup, set the version, restart.
-# NOTE: the base image also ships ENV YOURLS_VERSION=<bundled>; when the panel
-# has never saved the variable, that value leaks through and equals the image
-# version, which the comparison below turns into a no-op — exactly right.
-PIN="$(printf '%s' "${YOURLS_VERSION:-}" | tr -d ' ')"
-PIN="${PIN#v}"
-case "$PIN" in
-    *[!0-9.]*) log "YOURLS_VERSION '$PIN' er ugyldig (forventer fx 1.10.5); ignorerer"; PIN="" ;;
-esac
-if [ -n "$PIN" ] && [ "$PIN" != "$YOURLS_RUNE_VERSION" ]; then
-    [ "$AUTO_UPDATE" = true ] && log "YOURLS_VERSION er sat; AUTO_UPDATE ignoreres"
-    if fetch_core "$PIN"; then
-        log "YOURLS $PIN installeret (manuelt valgt; imaget indeholder $YOURLS_RUNE_VERSION)"
-    else
-        log "Kunne ikke hente YOURLS $PIN; kører imagets version $YOURLS_RUNE_VERSION"
-    fi
-elif [ "$AUTO_UPDATE" = true ]; then
-    update_core || log "AUTO_UPDATE fejlede; fortsætter på image-versionen ${YOURLS_RUNE_VERSION}"
-fi
-
-# Landing page for "/" -> /admin/. Added after every core copy above, since
-# YOURLS ships no index at the webroot root and the copies would not carry it.
+# Landing page for "/" -> /admin/ (YOURLS ships no webroot index).
 cp -a /usr/local/share/rune-webroot/index.php "$WEBROOT/index.php"
 
 # --- Version report -----------------------------------------------------------

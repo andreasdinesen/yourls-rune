@@ -40,11 +40,12 @@ COPY apply-plugin-state.php /usr/local/lib/apply-plugin-state.php
 
 # Process supervision + the per-process launchers.
 COPY supervisord.conf /etc/supervisor/supervisord.conf
-COPY rune-entrypoint.sh start-apache.sh run-mariadb.sh db-dump.sh /usr/local/bin/
+COPY rune-entrypoint.sh start-apache.sh run-mariadb.sh db-dump.sh update-yourls.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/rune-entrypoint.sh \
              /usr/local/bin/start-apache.sh \
              /usr/local/bin/run-mariadb.sh \
-             /usr/local/bin/db-dump.sh
+             /usr/local/bin/db-dump.sh \
+             /usr/local/bin/update-yourls.sh
 
 # The official YOURLS image serves on 8080.
 EXPOSE 8080/tcp

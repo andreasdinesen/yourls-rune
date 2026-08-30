@@ -155,6 +155,40 @@ jobs:
           echo "OK: pin works and the report flags the newer release"
           docker rm -f yourls-pin >/dev/null
 
+      - name: Assert login works on the latest YOURLS (1.10.6) and via the Update pin-file
+        run: |
+          docker volume create upvol >/dev/null
+          # Simulate the Update button: pre-seed the pin file, as update-yourls.sh does.
+          docker run --rm -v upvol:/data yourls-rune:test \
+            sh -c 'mkdir -p /data && printf 1.10.6 > /data/core-version' >/dev/null
+          docker run -d --name yourls-login -p 8090:8080 -v upvol:/data \
+            -e YOURLS_USER=admin -e YOURLS_PASS='s3cr3t-pw' yourls-rune:test >/dev/null
+          # Wait for install to finish (login form appears).
+          for i in $(seq 1 60); do
+            curl -s http://localhost:8090/admin/ 2>/dev/null | grep -qi 'name="password"' && break
+            sleep 5
+          done
+          # The pin file must have produced a 1.10.6 core.
+          ver=$(docker exec yourls-login sed -n "s/.*define( *'YOURLS_VERSION', *'\([^']*\)'.*/\1/p" \
+                /var/www/html/includes/version.php | head -1)
+          echo "core version = $ver"
+          [ "$ver" = "1.10.6" ] \
+            || { echo "::error::Update pin-file did not install 1.10.6 (got '$ver')"; docker logs yourls-login; exit 1; }
+          # Real login with the NO_HASH plaintext password on the new auth code.
+          jar=$(mktemp)
+          curl -s -c "$jar" -b "$jar" -o /dev/null \
+            --data-urlencode 'username=admin' --data-urlencode 'password=s3cr3t-pw' \
+            http://localhost:8090/admin/index.php
+          body=$(curl -s -c "$jar" -b "$jar" http://localhost:8090/admin/)
+          if echo "$body" | grep -qi 'name="password"'; then
+            echo "::error::login on 1.10.6 failed — still on the login form (NO_HASH/auth regression)"
+            docker logs yourls-login; exit 1
+          fi
+          echo "$body" | grep -qiE 'logout|log out|Hello' \
+            || { echo "::error::login on 1.10.6 did not reach the admin"; echo "$body" | head -40; docker logs yourls-login; exit 1; }
+          echo "OK: 1.10.6 installed via pin-file and admin login works"
+          docker rm -f yourls-login >/dev/null; docker volume rm upvol >/dev/null; rm -f "$jar"
+
       - name: Assert dropping a plugin from PLUGINS uninstalls it
         run: |
           docker volume create prunevol >/dev/null
