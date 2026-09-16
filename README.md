@@ -46,6 +46,7 @@ supervisor i ét image**:
 | `PLUGINS` | Plugins at installere, se [Plugins](#plugins) | *(tom)* |
 | `YOURLS_LANG` | Sprog, fx `da_DK` (kræver `.mo`-fil i `user/language`) | *(engelsk)* |
 | `YOURLS_URL_CONVERT` | Nøgleformat: `36` (små bogstaver) / `62` (blandet) | `36` |
+| `IMAGE_TAG` | Runens image: `latest` eller fx `v18` for at låse/rulle tilbage, se [Opdatering i panelet](#opdatering-i-panelet-og-versionslås). Ikke det samme som `YOURLS_VERSION` | `latest` |
 
 Databasen konfigureres automatisk — der er ingen DB-variabler at udfylde.
 
@@ -190,6 +191,38 @@ opgradering):
 Webroot'en lægges frisk fra imaget ved hver opstart, så **et nyere image = nyere
 YOURLS-kerne automatisk**. Kun `user/` (config, plugins, sider) og databasen er
 persistente.
+
+## Opdatering i panelet og versionslås
+
+Panelet har to trin, og de henter hver sin ting:
+
+1. **Runes → Browse GitHub → Reload** henter kun rune-definitionen (YAML'en) —
+   nye felter og den nye version i listen. Imaget røres ikke.
+2. **Restart** eller **Settings → Update/Reinstall** henter imaget. Panelet laver
+   `docker pull` på image-tagget, hver gang containeren skabes på ny — med
+   `IMAGE_TAG=latest` er hver Restart altså også en opdatering. **Reinstall** er
+   desuden det trin, der lægger runens standard-overvågning (log-watchers for
+   databasefejl og PHP-fatals) ind på en eksisterende server.
+
+Knappen **"Opdater YOURLS til nyeste"** henter også imaget (samme tag) og vælger
+desuden nyeste YOURLS-kerne — se [Manuel opdatering](#manuel-opdatering-og-versionsvisning).
+`/data` overlever alle tre.
+
+**Lås runens version:** Hvert image udgives som både `latest` og `v<rune-version>`.
+Sæt `IMAGE_TAG` til fx `v18` for at blive på runens version 18 — eller for at rulle
+tilbage — og tryk Restart. Et `vN`-tag bygges én gang ved udgivelsen og røres ikke af
+det ugentlige genbyg. Versions-taggene findes fra den udgivelse, der indførte feltet;
+ældre versioner findes kun som `latest`. `IMAGE_TAG` låser **imaget** (runens scripts,
+MariaDB, Apache/PHP og den medfølgende kerne); `YOURLS_VERSION` låser **kernen** og
+vinder inde i containeren.
+
+## Cloudflare og gamle filer efter en opdatering
+
+Ligger YOURLS bag et domæne via Cloudflare, kan Cloudflare servere gammel JS/CSS til
+admin-siderne (og plugins) i op til ~4 timer efter en image- eller kerneopdatering —
+selv om opdateringen lykkedes. Kuren er **Caching → Configuration → Purge Everything**
+i Cloudflare, eller en cache-regel, der sætter **Bypass cache** for værtsnavnet (eller
+i det mindste for `/admin/*`).
 
 ## Data og backup
 

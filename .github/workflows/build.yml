@@ -4,9 +4,10 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    # runes/** is NOT ignored: every rune version needs its own v<version>
+    # image, or IMAGE_TAG=vN in the panel points at a tag that doesn't exist.
     paths-ignore:
       - 'README.md'
-      - 'runes/**'
   schedule:
     - cron: '30 4 * * 1' # weekly rebuild to pick up base-image security patches
   workflow_dispatch:
@@ -303,12 +304,30 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The rune version also becomes an image tag (v<version>), so an install
+      # can be pinned or rolled back via the IMAGE_TAG variable in the panel.
+      - name: Read rune version
+        id: rune
+        run: |
+          v=$(sed -n 's/^  version: *//p' runes/yourls.yaml | head -1 | tr -d '"'"'"' ')
+          case "$v" in
+            ''|*[!0-9]*)
+              echo "Could not read a rune version from runes/yourls.yaml (got '$v')." >&2
+              echo "Publishing a tag named 'v' would be worse - stopping here." >&2
+              exit 1 ;;
+          esac
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Rune version: $v  ->  tag v$v"
       - id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # vN only on push/dispatch to main (check-upstream dispatches, so its
+          # bumps get one too) - NOT on the weekly rebuild, so a pinned vN stays
+          # exactly the image that was released.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=v${{ steps.rune.outputs.version }},enable=${{ github.ref == 'refs/heads/main' && github.event_name != 'schedule' }}
             type=semver,pattern={{version}}
       - uses: docker/build-push-action@v6
         with:

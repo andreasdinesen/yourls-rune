@@ -4,19 +4,19 @@ gameskill:
   category: "Apps"
   description: "Din egen URL-forkorter (yourls.org). Database er indbygget — ingen separat DB-rune. Log ind på /admin/. Sæt admin-bruger/kode nedenfor; slå AUTO_UPDATE til for at hente nyeste YOURLS ved opstart."
   author: "andreasdinesen"
-  version: 17
+  version: 18
   icon: "app"
 
   # All-in-one image (YOURLS + MariaDB + supervisor). Runs its own entrypoint as
   # root so MariaDB and Apache can start; only /data is persisted.
   docker:
-    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    image: "ghcr.io/andreasdinesen/yourls-rune:{{IMAGE_TAG}}"
     keep_entrypoint: true
     data_path: "/data"
     user: "0:0"
 
   install:
-    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    image: "ghcr.io/andreasdinesen/yourls-rune:{{IMAGE_TAG}}"
     script: |
       mkdir -p /data
       echo "Klar. Tryk Start, vent lidt, og log ind paa /admin/ med din admin-bruger."
@@ -24,12 +24,25 @@ gameskill:
   # "Opdater YOURLS"-knap på serversiden. Henter nyeste STABILE udgivelse og
   # vælger den; genstarten bagefter tager den i brug. TAG EN BACKUP FØRST.
   update:
-    image: "ghcr.io/andreasdinesen/yourls-rune:latest"
+    image: "ghcr.io/andreasdinesen/yourls-rune:{{IMAGE_TAG}}"
     label: "Opdater YOURLS til nyeste"
     script: |
       /usr/local/bin/update-yourls.sh
 
   variables:
+    # Image-version (runens, ikke YOURLS-kernens - det er YOURLS_VERSION nedenfor).
+    # "latest" foelger med hver udgivelse, "v18" laaser serveren til runens
+    # version 18. Panelet henter imaget (docker pull) ved hver Start/Restart, saa
+    # med latest er hver Restart ogsaa en opdatering. Et vN-tag genbygges IKKE af
+    # den ugentlige koersel. docker.image, install.image og update.image SKAL
+    # bruge samme tag. Versions-taggene findes fra den udgivelse, der indfoerte
+    # feltet; aeldre versioner findes kun som latest.
+    - key: IMAGE_TAG
+      name: "Image-version (runens): latest (foelger nyeste) eller fx v18 for at laase/rulle tilbage. Ikke det samme som YOURLS-versionen nedenfor"
+      type: string
+      default: "latest"
+      pattern: '^(latest|v[0-9]+)$'
+      hint: "Skriv latest eller et runeversionsnummer som v18"
     - key: YOURLS_USER
       name: "Admin-brugernavn"
       type: string
@@ -93,6 +106,24 @@ gameskill:
 
   ports:
     - { name: web, default: 8080, protocol: tcp }
+
+  # Standard-overvaagning (Kvasir-watchers). Laegges ind ved oprettelse og ved
+  # Reinstall - en eksisterende server faar dem foerst efter en Reinstall.
+  watchers:
+    # MariaDB's fejllog skriver "[ERROR]" (samme moenster som yggdrasils egen
+    # mariadb-rune). Enkelte linjer kan komme ved en uren nedlukning, derfor en
+    # taerskel.
+    - name: "Databasefejl (MariaDB)"
+      pattern: '\[ERROR\]|MariaDB startede ikke i tide'
+      threshold: 3
+      window_secs: 120
+    # Apache i det officielle php/yourls-image logger PHP-fejl til stderr. Bots,
+    # der kalder en include-fil direkte, giver enkelte fatals - et virkeligt
+    # nedbrud gentager sig paa hvert kald.
+    - name: "PHP fatal errors"
+      pattern: 'PHP Fatal error'
+      threshold: 3
+      window_secs: 300
 
   backup:
     # Raw mysql/ files are owned by the container's mysql uid and unreadable for
