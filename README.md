@@ -216,6 +216,10 @@ det ugentlige genbyg. Versions-taggene findes fra den udgivelse, der indførte f
 MariaDB, Apache/PHP og den medfølgende kerne); `YOURLS_VERSION` låser **kernen** og
 vinder inde i containeren.
 
+**Tomt felt:** `IMAGE_TAG` må aldrig stå tomt. Panelet bruger ikke standardværdien for et
+tomt felt, men gemmer det tomme, så image-adressen ender på `:` og hverken install eller
+Start kan hente imaget. Står feltet tomt, så skriv `latest`, gem og tryk Restart.
+
 ## Cloudflare og gamle filer efter en opdatering
 
 Ligger YOURLS bag et domæne via Cloudflare, kan Cloudflare servere gammel JS/CSS til
